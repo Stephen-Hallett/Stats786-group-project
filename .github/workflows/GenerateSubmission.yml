@@ -27,6 +27,8 @@ jobs:
       - name: Render Rmarkdown Readme file and Commit Results
         run: |
           echo "Rendering the page..."
+          export PACKAGES=$(grep -oP 'library\(\K[^)]+' Project-Submission.RMD | sort -u | awk '{printf "\"%s\",", $0}' | sed 's/,$//')
+          Rscript -e 'install.packages(c($PACKAGES))'
           Rscript -e 'install.packages(c("knitr", "rmarkdown"))'
           Rscript -e 'rmarkdown::render(input = "Project-Submission.Rmd")'
           Rscript -e 'rmarkdown::render(input = "Project-Submission.Rmd", output_file="README.md", output_format="md_document")'
