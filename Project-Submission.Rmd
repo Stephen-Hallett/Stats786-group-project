@@ -10,10 +10,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### Load Libraries
 ```{r}
-library(tidyverse)
 library(fpp3)
 library(kableExtra)
 library(gt)
+library(tidyr)
 ```
 
 
