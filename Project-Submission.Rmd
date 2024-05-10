@@ -8,3 +8,43 @@ date: "2024-05-10"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+### Load Libraries
+```{r}
+library(tidyverse)
+library(fpp3)
+library(kableExtra)
+library(gt)
+```
+
+
+### Import Data
+```{r}
+base_data = read_csv("qgdp_training.csv")
+data = base_data %>% 
+  select(Date, 
+         `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) %>% 
+  mutate(Date = yearquarter(Date)) %>% 
+  rename(FAAFFSS = `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
+data = as_tsibble(data, index=Date)
+rm(list="base_data") #Delete the original dataset
+
+data %>% autoplot() + 
+  labs(title="New Zealand Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services (FAAFFSS) GDP ($ Millions) from 1987Q2 to 2021Q4", x= "Quarter", y="FAAFFSS")
+```
+
+
+
+## NNAR Implementation
+```{r}
+NN.fit = data %>% 
+  model(base_model = NNETAR())
+
+NN.fit %>% 
+  forecast(h=8) %>% 
+  autoplot(data) + 
+  labs(title="FAAFFSS GDP ($ Millions) Predictions Using NNETAR Models", x= "Quarter", y="FAAFFSS")
+
+```
+
+
+
