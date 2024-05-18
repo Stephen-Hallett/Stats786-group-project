@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(fpp3)
 library(kableExtra)
 library(gt)
-library(tidyr)
+library(tidyverse)
 ```
 
 
@@ -34,10 +34,33 @@ data %>% autoplot() +
 
 
 
-## NNAR Implementation
+## Neural Network Auto Regression Model
+
+To understand how a Neural Network Auto Regression (NNAR) model works, its important to first understand the workings of a standard feed forward neural network.
+
+### Understanding Neural Networks
+
+A neural network is modelled after the way human brains work, in that each thought is a result of multiple different neurons firing. Neural networks act in a similar way, in that each prediction or output of the model is a result of several nodes or "neurons" combining their predictions together to come to a single prediction. In a feedforward neural network, the network is comprised of an input layer which includes the input data being fed into the model, optional hidden layers which taken in the output from the previous layer as input, and an output layer which returns the final prediction. The most basic neural network has no hidden layers, which acts the same as a linear regression model, since each input is given a weight, plus an additional bias (intercept) parameter. Hidden layers take the outputs of their preceding layers as inputs and then take a weighted linear sum of them, and alter them by a non linear function such as sigmoid or relu. These hidden layers allow non linearity to be captured by the model for more complicated relationships.
+  
+![Example Neural Network](./media/nnet2-1.png)
+  
+When training a feed forward neural network, each node in the network begins with random weights, which are then adjusted to minimize some metric - in the case of NNAR models this metric is MSE. Each iteration of training updates the weights of each node in the network, and then calculates the MSE of the models predictions when using these weights. The network then uses a process called back propagation to assess each node in the network to find which nodes were responsible for the most error in the result, so that in the next iteration these nodes can have their weights changed more drastically to improve the model as much as possible.
+
+### Understanding the Neural Network Auto Regression Model
+
+NNAR models are neural networks which take lagged values of the time series as inputs to the model in order to make predictions. These NNAR models can have many hidden layers, but we fit ours with just one in order to keep the model from being overly complicated. NNAR models are described by the notation NNAR(p, P, k), where p represents the amount of regular lagged inputs into the model, P represents the number of seasonal lags included as input to the model, and k is the number of neurons in the hidden layer. The easiest way to understand these parameters is by looking at an example.  
+  
+Say we are fitting an NNAR(3,2,3) model on a dataset with yearly seasonality. Here we have a p parameter of 3, meaning in order to predict $y_n$, we will take the lagged inputs $y_{n-1}, y_{n-2}, y_{n-3}$. Additionally we have the P parameter of 2, meaning we will take the seasonal lags $y_{n-12}, y_{n-24}$. This means our model will have an input layer of 5 nodes which take in the lagged inputs $y_{n-1}, y_{n-2}, y_{n-3}, y_{n-12}, y_{n-24}$. Also since our model has a k parameter of 3, it means there is a hidden layer containing 3 neurons, which each take the outputs from the input layer as their respective inputs.  
+  
+For our model we use the NNETAR() function to fit an NNAR model for us which will calculate optimal parameters for us. By default the model will determine p by fitting a linear model on the seasonally adjusted time series and taking the optimal number of lags according to AIC. The P parameter will automatically be set to 1, and the k parameter is set to (p + P + 1)/2.
+
+### Model fitting
 ```{r}
 NN.fit = data %>% 
-  model(base_model = NNETAR())
+  model(base_model = NNETAR()) %>% 
+  report(base_model)
+
+NN.fit %>% gg_tsresiduals()
 
 NN.fit %>% 
   forecast(h=8) %>% 
@@ -46,5 +69,8 @@ NN.fit %>%
 
 ```
 
+### Prediction Interval Calculation
 
-
+Since the NNAR model is not based on a well defined stochastic model, there is not a straightforward method to calculate the prediction interval. To account for this, bootstrapping is done in order to determine the variability for each prediction.  
+  
+The NNAR(1,1,2) model that we fit to the FAAFFSS data can be written as $y_t = f(z_{t-1}) + \epsilon_t$, where $z_t =  (y_{t-1}, y_{t-4})$ where the errors $\epsilon_t$ are assumed to be normally distributed around zero. Using this assumption, we can use our model to make a prediction for the next time period $y_{t+1}$ and add a bootstrapped error, either drawn from the normal distribution or taken from the sample of errors we saw in the training set. If we do this several times (The forecast function does it 1000 times by default) then we can approximate the prediction interval by finding the band which contains 80% and 95% of (predictions + errors) at the next time period. This process can be repeated for as many forecast periods as we like by using the most recent prediction as the input for the new predictions.
