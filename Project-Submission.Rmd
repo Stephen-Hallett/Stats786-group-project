@@ -16,7 +16,6 @@ library(gt)
 library(tidyverse)
 ```
 
-
 ### Import Data
 ```{r}
 base_data = read_csv("qgdp_training.csv")
@@ -273,3 +272,28 @@ NN.fit %>%
 Since the NNAR model is not based on a well defined stochastic model, there is not a straightforward method to calculate the prediction interval. To account for this, bootstrapping is done in order to determine the variability for each prediction.  
   
 The NNAR(1,1,2) model that we fit to the FAAFFSS data can be written as $y_t = f(z_{t-1}) + \epsilon_t$, where $z_t =  (y_{t-1}, y_{t-4})$ where the errors $\epsilon_t$ are assumed to be normally distributed around zero. Using this assumption, we can use our model to make a prediction for the next time period $y_{t+1}$ and add a bootstrapped error, either drawn from the normal distribution or taken from the sample of errors we saw in the training set. If we do this several times (The forecast function does it 1000 times by default) then we can approximate the prediction interval by finding the band which contains 80% and 95% of (predictions + errors) at the next time period. This process can be repeated for as many forecast periods as we like by using the most recent prediction as the input for the new predictions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, include=FALSE}
+renv::snapshot()
+```
+
