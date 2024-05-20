@@ -1,48 +1,3 @@
-### Load Libraries
-
-    library(fpp3)
-
-    ## ── Attaching packages ────────────────────────────────────────────── fpp3 0.5 ──
-
-    ## ✔ tibble      3.2.1     ✔ tsibble     1.1.4
-    ## ✔ dplyr       1.1.3     ✔ tsibbledata 0.4.1
-    ## ✔ tidyr       1.3.0     ✔ feasts      0.3.2
-    ## ✔ lubridate   1.9.3     ✔ fable       0.3.4
-    ## ✔ ggplot2     3.5.0     ✔ fabletools  0.4.1
-
-    ## ── Conflicts ───────────────────────────────────────────────── fpp3_conflicts ──
-    ## ✖ lubridate::date()    masks base::date()
-    ## ✖ dplyr::filter()      masks stats::filter()
-    ## ✖ tsibble::intersect() masks base::intersect()
-    ## ✖ tsibble::interval()  masks lubridate::interval()
-    ## ✖ dplyr::lag()         masks stats::lag()
-    ## ✖ tsibble::setdiff()   masks base::setdiff()
-    ## ✖ tsibble::union()     masks base::union()
-
-    library(kableExtra)
-
-    ## 
-    ## Attaching package: 'kableExtra'
-
-    ## The following object is masked from 'package:dplyr':
-    ## 
-    ##     group_rows
-
-    library(gt)
-    library(tidyverse)
-
-    ## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
-    ## ✔ forcats 1.0.0     ✔ readr   2.1.4
-    ## ✔ purrr   1.0.2     ✔ stringr 1.5.0
-
-    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-    ## ✖ purrr::%||%()            masks base::%||%()
-    ## ✖ dplyr::filter()          masks stats::filter()
-    ## ✖ kableExtra::group_rows() masks dplyr::group_rows()
-    ## ✖ tsibble::interval()      masks lubridate::interval()
-    ## ✖ dplyr::lag()             masks stats::lag()
-    ## ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
-
 ### Import Data
 
     base_data = read_csv("qgdp_training.csv")
@@ -69,7 +24,7 @@
 
     ## Plot variable not specified, automatically selected `.vars = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-2-1.png) \## Arima
+![](README_files/figure-markdown_strict/unnamed-chunk-1-1.png) \## Arima
 Models
 
 ### Explore different ARIMA models
@@ -101,7 +56,7 @@ be no need for a further first difference.
       labs(x = "x", y = "difference of y") + 
       theme_minimal() 
 
-![](README_files/figure-markdown_strict/unnamed-chunk-3-1.png) so it
+![](README_files/figure-markdown_strict/unnamed-chunk-2-1.png) so it
 moved the large of change in variability. variance roughly constant.
 
     # differencing seasonality
@@ -114,7 +69,7 @@ moved the large of change in variability. variance roughly constant.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-4-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-1.png)
 
 after differencing seasonality, we can’t see any patterns now. we
 removed the autocorrelation in seasonality. It also shows flat trend and
@@ -186,7 +141,7 @@ candidate ARIMA models.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-9-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-8-1.png)
 
 For the autoregression process, we check the pacf plot and see that the
 significant peaks up to 4 and no significant peaks afterwards. it
@@ -271,7 +226,7 @@ the MA terms.
       select(arima_013) %>%
       gg_tsresiduals()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-13-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png)
 
 ### Produce forecasts for h=8 quarters
 
@@ -281,7 +236,7 @@ the MA terms.
       autoplot(data) + 
       theme_minimal()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-14-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-13-1.png)
 
 ### Explain how prediction intervals are calculated for the method
 
@@ -404,7 +359,7 @@ to (p + P + 1)/2.
     ## a 2-2-1 network with 9 weights
     ## options were - linear output units 
     ## 
-    ## sigma^2 estimated as 490.8
+    ## sigma^2 estimated as 488.5
 
     NN.fit %>% gg_tsresiduals()
 
@@ -417,14 +372,14 @@ to (p + P + 1)/2.
     ## Warning: Removed 4 rows containing non-finite outside the scale range
     ## (`stat_bin()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-15-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-14-1.png)
 
     NN.fit %>% 
       forecast(h=8) %>% 
       autoplot(data) + 
       labs(title="FAAFFSS GDP ($ Millions) Predictions Using NNETAR Models", x= "Quarter", y="FAAFFSS")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-15-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-14-2.png)
 
 ### Prediction Interval Calculation
 
