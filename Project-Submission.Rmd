@@ -6,10 +6,6 @@ date: "2024-05-10"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
-
-### Load Libraries
-```{r}
 library(fpp3)
 library(kableExtra)
 library(gt)
