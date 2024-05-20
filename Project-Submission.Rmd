@@ -31,6 +31,205 @@ rm(list="base_data") #Delete the original dataset
 data %>% autoplot() + 
   labs(title="New Zealand Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services (FAAFFSS) GDP ($ Millions) from 1987Q2 to 2021Q4", x= "Quarter", y="FAAFFSS")
 ```
+## Arima Models
+
+### Explore different ARIMA models
+
+###  Explain any transformations or differencing required
+
+From data autoplot graph, we can see that
+
+1. the seasonal variations are increasing over time which suggests a multiplicative seasonality pattern. So we would do a log transformation to stabilize the variance. This transformation converts multiplicative relationships into additive ones, making the series easier to model.
+
+2. the data seems have seasonal effects that repeat every 4 quarters. So we would also differencing for seasonality to remove this effect.
+
+3.there is an upward trend indicates that the mean of the series is not constant over time. So we would need to do first difference to make the series stationary in terms of the trend. However, as the data have a strong seasonal pattern, we will apply seasonal differencing first, because sometimes the resulting series will be stationary and there will be no need for a further first difference.
+
+
+
+```{r}
+# Log transform to remove the non-constant variance. 
+
+data %>% 
+  autoplot(log(FAAFFSS) ) + 
+  labs(x = "x", y = "difference of y") + 
+  theme_minimal() 
+```
+so it moved the large of change in variability. variance roughly constant. 
+
+```{r}
+# differencing seasonality
+
+data %>% 
+  autoplot(log(FAAFFSS) %>% difference(lag=4)) + 
+  labs(x = "x", y = "difference of y") + 
+  theme_minimal() 
+
+```
+
+
+after differencing seasonality,  we can't see any patterns now. we removed the autocorrelation in seasonality. It also shows flat trend and the mean is roughly constant, which suggests we removed the trend by seasonal differencing and we don't need to to first order difference anymore. So we have stationary time series. 
+
+
+```{r}
+
+# test if now the time series data are stationary and non-seasonaly with KPSS test
+data  %>%
+  features(FAAFFSS , unitroot_kpss)
+
+data  %>%
+  features(difference(log(FAAFFSS), 4) , unitroot_kpss)
+```
+so we can see the change of kpss after applying the transformation and difference. there is now no evidence against the null hypothesis. which means we get a stationary time series. 
+
+Or we can test how many difference we need to do to get a stationary time series. It shows 1 is enough, which with aligns with what we did. 
+
+```{r}
+data %>%
+features(FAAFFSS, unitroot_ndiffs)
+```
+
+```{r}
+data %>%
+mutate(log_fa = log(FAAFFSS)) %>%
+features(log_fa, feat_stl)
+```
+```{r}
+data %>%
+features(FAAFFSS, unitroot_nsdiffs)
+```
+
+
+###  Describe methodology used to create a shortlist of appropriate candidate ARIMA models (Fit both manually & automatically)
+
+
+Now we will check on the acf and pacf to help us decide appropriate candidate ARIMA models. 
+
+```{r}
+data %>%gg_tsdisplay( log(FAAFFSS) %>% difference(4) , plot_type = "partial")
+
+```
+
+For the autoregression process, we check the pacf plot and see that the significant peaks up to 4 and no significant peaks afterwards. it suggest 4 autoregressive terms. 
+likewise,for the moving average process, we check the acf plot and see significant peaks up to the order of 3 and no significant peaks afterwards. it suggest 3 moving average terms. 
+Now we add the manual fit and automatical fit together. 
+
+```{r}
+
+# Manually and Automatically fit candidate models 
+fit <- data %>%
+  model(arima_013 = ARIMA(FAAFFSS ~ pdq(0, 1, 3)),
+        arima_413 = ARIMA(FAAFFSS ~ pdq(4, 1, 0)),
+        stepwise = ARIMA(FAAFFSS),
+        search = ARIMA(FAAFFSS, stepwise = FALSE))
+
+
+```
+
+
+### Select the best model & explain why
+
+
+
+We compare the result of both manual and auto fit ARIMA model and select the model with smallest AICc as the best model. Here we will select the manually fitted one "arima_013" as our best model.  
+
+```{r}
+
+glance(fit) %>% 
+  arrange(AICc) %>% 
+  select(.model:BIC)
+```
+
+
+
+```{r}
+# Report best model
+fit %>%
+  select(arima_013) %>%
+  report()
+
+
+```
+
+
+###  Write the model equation in backshift notation
+
+This specifies an ARIMA(0, 1, 3) model, which means:
+p=0: No autoregressive (AR) terms.
+d=1: First difference to achieve stationary.
+q=3: Three moving average (MA) terms.
+Backshift Notation:
+
+
+$$
+W_t = Y_t - Y_{t-1}
+$$
+The ARIMA(0, 1, 3) model is:
+
+$$
+W_t = \epsilon_t - \theta_1 \epsilon_{t-1} - \theta_2 \epsilon_{t-2} - \theta_3 \epsilon_{t-3}
+$$
+
+Substituting \( W_t \) gives:
+
+$$
+Y_t - Y_{t-1} = \epsilon_t - \theta_1 \epsilon_{t-1} - \theta_2 \epsilon_{t-2} - \theta_3 \epsilon_{t-3}
+$$
+
+Rearranging the terms, we get:
+
+$$
+Y_t = Y_{t-1} + \epsilon_t - \theta_1 \epsilon_{t-1} - \theta_2 \epsilon_{t-2} - \theta_3 \epsilon_{t-3}
+$$
+
+Where:
+- \( Y_t \) is the value of the series at time \( t \).
+- \( \epsilon_t \) is the white noise error term at time \( t \).
+- \( \theta_1, \theta_2, \theta_3 \) are the parameters of the MA terms.
+
+### Produce residual diagnostic plots (ggtsresiduals())
+
+```{r}
+# Check residuals
+fit %>% 
+  select(arima_013) %>%
+  gg_tsresiduals()
+
+```
+
+
+###  Produce forecasts for h=8 quarters
+
+```{r}
+fit %>% 
+  select(arima_013) %>%
+  forecast(h = 8) %>%
+  autoplot(data) + 
+  theme_minimal()
+```
+
+
+###  Explain how prediction intervals are calculated for the method
+
+Prediction intervals provide a range within which future observations are expected to fall with a certain probability, typically 95%. Here's how prediction intervals are calculated for an ARIMA model:
+
+1. **Forecast Error Variance**: The prediction interval is based on the forecast error variance, which increases with the forecast horizon. For an ARIMA model, the forecast error at time \( t+h \) is calculated using the moving average (MA) process.
+
+2. **Standard Error of Forecast**: For an \( h \)-step ahead forecast, the standard error \( \sigma_h \) can be computed using the residuals of the fitted model and the MA terms.
+
+The standard error \( \sigma_h \) accounts for the model parameters and the white noise variance. It includes the accumulation of forecast uncertainty as the horizon \( h \) increases.
+
+3. **Prediction Interval Formula**:  For a 95% confidence interval, the critical value \( z_{0.025} \) is 1.96. Using the forecasted values and the calculated standard error, construct the prediction intervals. 
+
+$$
+\hat{Y}_{t+h} \pm z_{\alpha/2} \cdot \sigma_h
+$$
+
+Where:
+- \( \hat{Y}_{t+h} \) is the forecasted value for time \( t+h \).
+- \( z_{\alpha/2} \) is the critical value from the standard normal distribution for the desired confidence level (e.g., 1.96 for 95% confidence).
+- \( \sigma_h \) is the standard error of the \( h \)-step ahead forecast.
+
 
 
 
