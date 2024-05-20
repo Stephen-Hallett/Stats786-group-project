@@ -20,13 +20,12 @@ jobs:
       - uses: r-lib/actions/setup-pandoc@v2
 
       - uses: r-lib/actions/setup-r@v2
+
+      - uses: r-lib/actions/setup-renv@v2
       
       - name: Render Rmarkdown Readme file and Commit Results
         run: |
           echo "Rendering the page..."
-          export PACKAGES=$(grep -oP 'library\(\K[^)]+' Project-Submission.Rmd | sort -u | awk '{printf "\"%s\",", $0}' | sed 's/,$//')
-          echo 'Running install.packages(c("knitr", "rmarkdown", '$PACKAGES'))'
-          Rscript -e 'install.packages(c("knitr", "rmarkdown", '$PACKAGES'))'
           Rscript -e 'rmarkdown::render(input = "Project-Submission.Rmd", output_file="README.md", output_format="md_document")'
           if [[ "$(git status --porcelain)" != "" ]]; then
             git config --local user.name "$GITHUB_ACTOR"
