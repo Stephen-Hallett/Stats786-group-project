@@ -359,7 +359,7 @@ to (p + P + 1)/2.
     ## a 2-2-1 network with 9 weights
     ## options were - linear output units 
     ## 
-    ## sigma^2 estimated as 488.5
+    ## sigma^2 estimated as 492.1
 
     NN.fit %>% gg_tsresiduals()
 
