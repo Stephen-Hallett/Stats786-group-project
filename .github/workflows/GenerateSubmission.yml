@@ -30,6 +30,7 @@ jobs:
         run: |
           echo "Rendering the page..."
           Rscript -e 'rmarkdown::render(input = "Project-Submission.Rmd", output_file="README.md", output_format="md_document")'
+          Rscript -e 'rmarkdown::render(input = "Project-Submission.Rmd")'
           if [[ "$(git status --porcelain)" != "" ]]; then
             git config --local user.name "$GITHUB_ACTOR"
             git config --local user.email "$GITHUB_ACTOR@users.noreply.github.com"
