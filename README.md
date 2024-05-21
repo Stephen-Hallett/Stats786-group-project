@@ -24,8 +24,342 @@
 
     ## Plot variable not specified, automatically selected `.vars = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-1.png) \## Arima
-Models
+![](README_files/figure-markdown_strict/unnamed-chunk-1-1.png) \#
+Methodology to Create a Shortlist of Appropriate Candidate ETS Models
+
+    # Check for missing values
+    missing_values <- data %>% summarise(across(everything(), ~ sum(is.na(.))))
+    print(missing_values)
+
+    ## # A tsibble: 139 x 2 [1Q]
+    ##       Date FAAFFSS
+    ##      <qtr>   <int>
+    ##  1 1987 Q2       0
+    ##  2 1987 Q3       0
+    ##  3 1987 Q4       0
+    ##  4 1988 Q1       0
+    ##  5 1988 Q2       0
+    ##  6 1988 Q3       0
+    ##  7 1988 Q4       0
+    ##  8 1989 Q1       0
+    ##  9 1989 Q2       0
+    ## 10 1989 Q3       0
+    ## # ℹ 129 more rows
+
+## Manual Model Fitting:
+
+Defining ETS Models: Manually specify and fit a variety of ETS models
+with different combinations of error (E), trend (T), and seasonality (S)
+components.
+
+The models are categorized as follows:
+
+Error Component (E): Additive (A) or Multiplicative (M).
+
+Trend Component (T): None (N), Additive (A), Multiplicative (M), or
+Additive damped (Ad).
+
+Seasonality Component (S): None (N), Additive (A), or Multiplicative
+(M).
+
+Model Examples: Fit models such as ETS(A, N, N) for Simple Exponential
+Smoothing, ETS(A, A, N) for Holt’s Linear Trend, and ETS(A, A, A) for
+Additive Holt-Winters, among others.
+
+    # Manually fit different ETS models
+    # ETS(A,N,N): Model for simple exponential smoothing (SES)
+    fit_ann <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("N") + season("N")))
+    # ETS(M,N,N): SES with multiplicative errors
+    fit_mnn <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("N") + season("N")))
+    # ETS(A,A,N): A model for Holt’s linear trend method
+    fit_aan <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("A") + season("N")))
+    # ETS(M,A,N): Holt’s linear trend method with multiplicative errors
+    fit_man <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("A") + season("N")))
+    fit_amn <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("M") + season("N")))
+    fit_mmn <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("M") + season("N")))
+    fit_ana <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("N") + season("A")))
+    fit_mna <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("N") + season("A")))
+    fit_aaa <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("A") + season("A")))
+    fit_maa <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("A") + season("A")))
+    fit_ama <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("M") + season("A")))
+    fit_mma <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("M") + season("A")))
+    fit_anm <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("N") + season("M")))
+    fit_mnm <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("N") + season("M")))
+    fit_aam <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("A") + season("M")))
+    fit_mam <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("A") + season("M")))
+    fit_amm <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("M") + season("M")))
+    fit_mmm <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("M") + season("M")))
+    fit_adn <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("Ad") + season("N")))
+    fit_mdn <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("Ad") + season("N")))
+    fit_ada <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("Ad") + season("A")))
+    fit_mda <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("Ad") + season("A")))
+    fit_adm <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("Ad") + season("M")))
+    fit_mdm <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("Ad") + season("M")))
+
+## Automatic Model Selection:
+
+Using Automated ETS: Utilize the ETS function to automatically fit the
+best ETS model based on information criteria like AICc (Akaike
+Information Criterion corrected for small sample sizes).
+
+    # Automatically fit the ETS model
+    fit_auto <- data %>% model(ETS(FAAFFSS))
+    report(fit_auto)
+
+    ## Series: FAAFFSS 
+    ## Model: ETS(M,A,M) 
+    ##   Smoothing parameters:
+    ##     alpha = 0.5044422 
+    ##     beta  = 0.007167769 
+    ##     gamma = 0.4955577 
+    ## 
+    ##   Initial states:
+    ##      l[0]     b[0]      s[0]     s[-1]    s[-2]     s[-3]
+    ##  193.4443 5.672164 0.8798408 0.9597361 1.256635 0.9037881
+    ## 
+    ##   sigma^2:  0.0027
+    ## 
+    ##      AIC     AICc      BIC 
+    ## 1518.864 1520.260 1545.275
+
+## Model Comparison:
+
+Calculating AICc Values: For each manually fitted model and the
+automatically selected model, compute the AICc value. The AICc penalizes
+model complexity to prevent overfitting and is useful for comparing
+models.
+
+Ranking Models: Create a list of all candidate models along with their
+AICc values. Sort the models by AICc in ascending order to identify the
+best-performing models.
+
+Choosing the Lowest AICc Model: Select the model with the lowest AICc
+value as the best model. This model is expected to balance goodness of
+fit and model complexity.
+
+    # Compare models using AICc
+    aic_values <- bind_rows(
+      glance(fit_aaa) %>% mutate(Model = "AAA"),
+      glance(fit_ann) %>% mutate(Model = "ANN"),
+      glance(fit_mnn) %>% mutate(Model = "MNN"),
+      glance(fit_aan) %>% mutate(Model = "AAN"),
+      glance(fit_man) %>% mutate(Model = "MAN"),
+      glance(fit_amn) %>% mutate(Model = "AMN"),
+      glance(fit_mmn) %>% mutate(Model = "MMN"),
+      glance(fit_ana) %>% mutate(Model = "ANA"),
+      glance(fit_mna) %>% mutate(Model = "MNA"),
+      glance(fit_maa) %>% mutate(Model = "MAA"),
+      glance(fit_ama) %>% mutate(Model = "AMA"),
+      glance(fit_mma) %>% mutate(Model = "MMA"),
+      glance(fit_anm) %>% mutate(Model = "ANM"),
+      glance(fit_mnm) %>% mutate(Model = "MNM"),
+      glance(fit_aam) %>% mutate(Model = "AAM"),
+      glance(fit_mam) %>% mutate(Model = "MAM"),
+      glance(fit_mmm) %>% mutate(Model = "MMM"),
+      glance(fit_amm) %>% mutate(Model = "AMM"),
+      glance(fit_adn) %>% mutate(Model = "AAdN"),
+      glance(fit_mdn) %>% mutate(Model = "MAdN"),
+      glance(fit_ada) %>% mutate(Model = "AAdA"),
+      glance(fit_mda) %>% mutate(Model = "MAdA"),
+      glance(fit_adm) %>% mutate(Model = "AAdM"),
+      glance(fit_mdm) %>% mutate(Model = "MAdM"),
+      glance(fit_auto) %>% mutate(Model = "AUTO_MAM"),
+    ) %>% select(Model, AICc) %>% arrange(AICc)
+
+    print(aic_values)
+
+    ## # A tibble: 25 × 2
+    ##    Model     AICc
+    ##    <chr>    <dbl>
+    ##  1 MAM      1520.
+    ##  2 AUTO_MAM 1520.
+    ##  3 MAdM     1520.
+    ##  4 AAM      1523.
+    ##  5 AMM      1524.
+    ##  6 AAA      1527.
+    ##  7 AAdM     1528.
+    ##  8 AMA      1529.
+    ##  9 MMM      1530.
+    ## 10 ANM      1530.
+    ## # ℹ 15 more rows
+
+## Reasons for Selecting the ETS(MAM) Model: Lowest AICc Value
+
+Model Comparison: Among the various manually fitted models and the
+automatically selected model, ETS(MAM) was found to have the lowest AICc
+value. The AICc (Akaike Information Criterion corrected for small sample
+sizes) is a measure of the relative quality of statistical models for a
+given set of data. It considers both the goodness of fit and the
+complexity of the model (penalizing for the number of parameters). A
+lower AICc value indicates a better balance between model fit and
+complexity.
+
+Statistical Justification: Selecting the model with the lowest AICc
+helps in minimizing overfitting while ensuring that the model adequately
+captures the underlying patterns in the data.
+
+    # Select the best model based on the lowest AICc value
+    best_model <- fit_mam 
+    report(best_model)
+
+    ## Series: FAAFFSS 
+    ## Model: ETS(M,A,M) 
+    ##   Smoothing parameters:
+    ##     alpha = 0.5044422 
+    ##     beta  = 0.007167769 
+    ##     gamma = 0.4955577 
+    ## 
+    ##   Initial states:
+    ##      l[0]     b[0]      s[0]     s[-1]    s[-2]     s[-3]
+    ##  193.4443 5.672164 0.8798408 0.9597361 1.256635 0.9037881
+    ## 
+    ##   sigma^2:  0.0027
+    ## 
+    ##      AIC     AICc      BIC 
+    ## 1518.864 1520.260 1545.275
+
+## In an ETS(MAM) model:
+
+E stands for the error term, which is multiplicative.
+
+T stands for the trend component, which is additive.
+
+S stands for the seasonal component, which is multiplicative.
+
+The general form of the ETS(MAM) model equations are:
+*y*<sub>*t*</sub> = (*l*<sub>*t* − 1</sub>+*b*<sub>*t* − 1</sub>)*s*<sub>*t* − *m*</sub>(1+*ϵ*<sub>*t*</sub>)
+*l*<sub>*t*</sub> = (*l*<sub>*t* − 1</sub>+*b*<sub>*t* − 1</sub>)(1+*α**ϵ*<sub>*t*</sub>)
+*b*<sub>*t*</sub> = *b*<sub>*t* − 1</sub> + *β*(*l*<sub>*t* − 1</sub>+*b*<sub>*t* − 1</sub>)*ϵ*<sub>*t*</sub>
+*s*<sub>*t*</sub> = *s*<sub>*t* − *m*</sub>(1+*γ**ϵ*<sub>*t*</sub>)
+Where:
+
+*y*<sub>*t*</sub> is the observed value at time t.
+
+*l*<sub>*t*</sub> is the level component at time t.
+
+*b*<sub>*t*</sub> is the trend component at time t.
+
+*s*<sub>*t*</sub> is the seasonal component at time t.
+
+α, β, and γ are the smoothing parameters for the level, trend, and
+seasonal components, respectively.
+
+m is the period of seasonality.
+
+    # Plot the fitted values
+    best_model %>% augment()
+
+    ## # A tsibble: 139 x 6 [1Q]
+    ## # Key:       .model [1]
+    ##    .model                                  Date FAAFFSS .fitted  .resid   .innov
+    ##    <chr>                                  <qtr>   <dbl>   <dbl>   <dbl>    <dbl>
+    ##  1 "ETS(FAAFFSS ~ error(\"M\") + trend… 1987 Q2     178    180.  -1.96  -0.0109 
+    ##  2 "ETS(FAAFFSS ~ error(\"M\") + trend… 1987 Q3     244    256. -12.0   -0.0467 
+    ##  3 "ETS(FAAFFSS ~ error(\"M\") + trend… 1987 Q4     200    196.   3.76   0.0192 
+    ##  4 "ETS(FAAFFSS ~ error(\"M\") + trend… 1988 Q1     186    187.  -0.583 -0.00313
+    ##  5 "ETS(FAAFFSS ~ error(\"M\") + trend… 1988 Q2     205    195.   9.63   0.0493 
+    ##  6 "ETS(FAAFFSS ~ error(\"M\") + trend… 1988 Q3     296    280.  15.6    0.0556 
+    ##  7 "ETS(FAAFFSS ~ error(\"M\") + trend… 1988 Q4     224    233.  -9.12  -0.0391 
+    ##  8 "ETS(FAAFFSS ~ error(\"M\") + trend… 1989 Q1     232    212.  19.8    0.0932 
+    ##  9 "ETS(FAAFFSS ~ error(\"M\") + trend… 1989 Q2     217    238. -21.3   -0.0895 
+    ## 10 "ETS(FAAFFSS ~ error(\"M\") + trend… 1989 Q3     300    319. -18.9   -0.0593 
+    ## # ℹ 129 more rows
+
+    augment(best_model) %>%
+    ggplot(aes(x = Date)) +
+    geom_line(aes(y = FAAFFSS, colour = "Data")) +
+    geom_line(aes(y = .fitted, colour = "Fitted")) +
+    guides(colour = guide_legend(title = ""))
+
+![](README_files/figure-markdown_strict/unnamed-chunk-7-1.png) \## Model
+Diagnostics:
+
+Residual Analysis: Perform residual diagnostics on the selected model to
+ensure that the residuals behave like white noise (i.e., they are
+uncorrelated and have constant variance).
+
+Components Decomposition: Decompose the selected model to inspect its
+components (level, trend, and seasonality) for better understanding and
+validation.
+
+    # Residual diagnostics
+    best_model %>% gg_tsresiduals()
+
+![](README_files/figure-markdown_strict/unnamed-chunk-8-1.png)
+
+    # Components Decomposition
+    best_model %>%
+      components() %>% 
+      autoplot()
+
+    ## Warning: Removed 4 rows containing missing values or values outside the scale range
+    ## (`geom_line()`).
+
+![](README_files/figure-markdown_strict/unnamed-chunk-8-2.png)
+
+    # Generate forecasts
+    forecast_data <- best_model %>% forecast(h = 8)
+    forecast_data
+
+    ## # A fable: 8 x 4 [1Q]
+    ## # Key:     .model [1]
+    ##   .model                                                 Date      FAAFFSS .mean
+    ##   <chr>                                                 <qtr>       <dist> <dbl>
+    ## 1 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2022 Q1 N(617, 1014)  617.
+    ## 2 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2022 Q2 N(569, 1085)  569.
+    ## 3 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2022 Q3 N(628, 1599)  628.
+    ## 4 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2022 Q4 N(670, 2142)  670.
+    ## 5 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2023 Q1 N(632, 3011)  632.
+    ## 6 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2023 Q2 N(583, 2807)  583.
+    ## 7 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2023 Q3 N(643, 3733)  643.
+    ## 8 "ETS(FAAFFSS ~ error(\"M\") + trend(\"A\") + seaso… 2023 Q4 N(686, 4609)  686.
+
+    forecast_data %>% autoplot(data) +
+      labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "FAAFFSS")
+
+![](README_files/figure-markdown_strict/unnamed-chunk-9-1.png)
+
+## Explanation of Prediction Intervals
+
+An advantage of ETS models is that prediction intervals can be
+constructed. Prediction intervals will differ between additive and
+multiplicative error models.
+
+For ETS(A,N/A/Ad,N/A) models prediction distributions are Gaussian.
+
+For ETS(M,N/A/Ad,N/A/M) models prediction distributions are non-Gaussian
+because of nonlinearity of the state space equations.
+
+Gaussian approximation usually give reasonably accurate results.
+
+If this approximation is not reasonable, we can generate future sample
+paths conditional on the last estimate of the states, and then to obtain
+prediction intervals from the percentiles of these simulated future
+paths.
+
+In the ETS model, the prediction interval is calculated based on the
+variance of the residuals. The ETS (MAM) model is a multiplicative error
+model, and the calculation of its prediction interval takes into account
+the gradual accumulation of prediction errors. Specifically, the
+prediction interval is calculated through the following steps:
+
+Calculate point prediction value: Based on the parameters of the ETS
+model and input data at future time points, calculate the future point
+prediction value.
+
+Estimate the variance of the forecast error: Use the variance of the
+residuals to estimate the variance of the forecast error. For the
+multiplicative error model, the variance of the error increases with
+forecast time.
+
+Calculate the prediction interval: Based on the variance of the
+prediction error and using the assumption of normal distribution,
+calculate the prediction interval at different confidence levels.
+
+In R, these steps are completed automatically by the forecast function,
+we only need to specify the forecast time range h.
+
+## Arima Models
 
 ### Explore different ARIMA models
 
@@ -56,7 +390,7 @@ be no need for a further first difference.
       labs(x = "x", y = "difference of y") + 
       theme_minimal() 
 
-![](README_files/figure-markdown_strict/unnamed-chunk-2-1.png) so it
+![](README_files/figure-markdown_strict/unnamed-chunk-10-1.png) so it
 moved the large of change in variability. variance roughly constant.
 
     # differencing seasonality
@@ -69,7 +403,7 @@ moved the large of change in variability. variance roughly constant.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-3-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-11-1.png)
 
 after differencing seasonality, we can’t see any patterns now. we
 removed the autocorrelation in seasonality. It also shows flat trend and
@@ -141,7 +475,7 @@ candidate ARIMA models.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-8-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-16-1.png)
 
 For the autoregression process, we check the pacf plot and see that the
 significant peaks up to 4 and no significant peaks afterwards. it
@@ -226,7 +560,7 @@ the MA terms.
       select(arima_013) %>%
       gg_tsresiduals()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-20-1.png)
 
 ### Produce forecasts for h=8 quarters
 
@@ -236,7 +570,7 @@ the MA terms.
       autoplot(data) + 
       theme_minimal()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-13-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-21-1.png)
 
 ### Explain how prediction intervals are calculated for the method
 
@@ -359,7 +693,7 @@ to (p + P + 1)/2.
     ## a 2-2-1 network with 9 weights
     ## options were - linear output units 
     ## 
-    ## sigma^2 estimated as 492.1
+    ## sigma^2 estimated as 490.8
 
     NN.fit %>% gg_tsresiduals()
 
@@ -372,14 +706,14 @@ to (p + P + 1)/2.
     ## Warning: Removed 4 rows containing non-finite outside the scale range
     ## (`stat_bin()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-14-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-22-1.png)
 
     NN.fit %>% 
       forecast(h=8) %>% 
       autoplot(data) + 
       labs(title="FAAFFSS GDP ($ Millions) Predictions Using NNETAR Models", x= "Quarter", y="FAAFFSS")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-14-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-22-2.png)
 
 ### Prediction Interval Calculation
 
