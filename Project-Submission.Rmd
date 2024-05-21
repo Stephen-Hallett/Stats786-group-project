@@ -31,6 +31,209 @@ rm(list="base_data") #Delete the original dataset
 data %>% autoplot() + 
   labs(title="New Zealand Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services (FAAFFSS) GDP ($ Millions) from 1987Q2 to 2021Q4", x= "Quarter", y="FAAFFSS")
 ```
+# Methodology to Create a Shortlist of Appropriate Candidate ETS Models
+```{r}
+# Check for missing values
+missing_values <- data %>% summarise(across(everything(), ~ sum(is.na(.))))
+print(missing_values)
+```
+## Manual Model Fitting:
+
+Defining ETS Models: Manually specify and fit a variety of ETS models with different combinations of error (E), trend (T), and seasonality (S) components. 
+
+The models are categorized as follows:
+
+Error Component (E): Additive (A) or Multiplicative (M).
+
+Trend Component (T): None (N), Additive (A), Multiplicative (M), or Additive damped (Ad).
+
+Seasonality Component (S): None (N), Additive (A), or Multiplicative (M).
+
+Model Examples: Fit models such as ETS(A, N, N) for Simple Exponential Smoothing, ETS(A, A, N) for Holt's Linear Trend, and ETS(A, A, A) for Additive Holt-Winters, among others.
+```{r}
+# Manually fit different ETS models
+# ETS(A,N,N): Model for simple exponential smoothing (SES)
+fit_ann <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("N") + season("N")))
+# ETS(M,N,N): SES with multiplicative errors
+fit_mnn <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("N") + season("N")))
+# ETS(A,A,N): A model for Holt’s linear trend method
+fit_aan <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("A") + season("N")))
+# ETS(M,A,N): Holt’s linear trend method with multiplicative errors
+fit_man <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("A") + season("N")))
+fit_amn <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("M") + season("N")))
+fit_mmn <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("M") + season("N")))
+fit_ana <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("N") + season("A")))
+fit_mna <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("N") + season("A")))
+fit_aaa <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("A") + season("A")))
+fit_maa <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("A") + season("A")))
+fit_ama <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("M") + season("A")))
+fit_mma <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("M") + season("A")))
+fit_anm <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("N") + season("M")))
+fit_mnm <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("N") + season("M")))
+fit_aam <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("A") + season("M")))
+fit_mam <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("A") + season("M")))
+fit_amm <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("M") + season("M")))
+fit_mmm <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("M") + season("M")))
+fit_adn <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("Ad") + season("N")))
+fit_mdn <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("Ad") + season("N")))
+fit_ada <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("Ad") + season("A")))
+fit_mda <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("Ad") + season("A")))
+fit_adm <- data %>% model(ETS(FAAFFSS ~ error("A") + trend("Ad") + season("M")))
+fit_mdm <- data %>% model(ETS(FAAFFSS ~ error("M") + trend("Ad") + season("M")))
+```
+
+## Automatic Model Selection:
+
+Using Automated ETS: Utilize the ETS function to automatically fit the best ETS model based on information criteria like AICc (Akaike Information Criterion corrected for small sample sizes).
+```{r}
+# Automatically fit the ETS model
+fit_auto <- data %>% model(ETS(FAAFFSS))
+report(fit_auto)
+```
+## Model Comparison:
+
+Calculating AICc Values: For each manually fitted model and the automatically selected model, compute the AICc value. The AICc penalizes model complexity to prevent overfitting and is useful for comparing models.
+
+Ranking Models: Create a list of all candidate models along with their AICc values. Sort the models by AICc in ascending order to identify the best-performing models.
+
+Choosing the Lowest AICc Model: Select the model with the lowest AICc value as the best model. This model is expected to balance goodness of fit and model complexity.
+```{r}
+# Compare models using AICc
+aic_values <- bind_rows(
+  glance(fit_aaa) %>% mutate(Model = "AAA"),
+  glance(fit_ann) %>% mutate(Model = "ANN"),
+  glance(fit_mnn) %>% mutate(Model = "MNN"),
+  glance(fit_aan) %>% mutate(Model = "AAN"),
+  glance(fit_man) %>% mutate(Model = "MAN"),
+  glance(fit_amn) %>% mutate(Model = "AMN"),
+  glance(fit_mmn) %>% mutate(Model = "MMN"),
+  glance(fit_ana) %>% mutate(Model = "ANA"),
+  glance(fit_mna) %>% mutate(Model = "MNA"),
+  glance(fit_maa) %>% mutate(Model = "MAA"),
+  glance(fit_ama) %>% mutate(Model = "AMA"),
+  glance(fit_mma) %>% mutate(Model = "MMA"),
+  glance(fit_anm) %>% mutate(Model = "ANM"),
+  glance(fit_mnm) %>% mutate(Model = "MNM"),
+  glance(fit_aam) %>% mutate(Model = "AAM"),
+  glance(fit_mam) %>% mutate(Model = "MAM"),
+  glance(fit_mmm) %>% mutate(Model = "MMM"),
+  glance(fit_amm) %>% mutate(Model = "AMM"),
+  glance(fit_adn) %>% mutate(Model = "AAdN"),
+  glance(fit_mdn) %>% mutate(Model = "MAdN"),
+  glance(fit_ada) %>% mutate(Model = "AAdA"),
+  glance(fit_mda) %>% mutate(Model = "MAdA"),
+  glance(fit_adm) %>% mutate(Model = "AAdM"),
+  glance(fit_mdm) %>% mutate(Model = "MAdM"),
+  glance(fit_auto) %>% mutate(Model = "AUTO_MAM"),
+) %>% select(Model, AICc) %>% arrange(AICc)
+
+print(aic_values)
+```
+
+## Reasons for Selecting the ETS(MAM) Model: Lowest AICc Value
+
+Model Comparison: Among the various manually fitted models and the automatically selected model, ETS(MAM) was found to have the lowest AICc value. The AICc (Akaike Information Criterion corrected for small sample sizes) is a measure of the relative quality of statistical models for a given set of data. It considers both the goodness of fit and the complexity of the model (penalizing for the number of parameters). A lower AICc value indicates a better balance between model fit and complexity.
+
+Statistical Justification: Selecting the model with the lowest AICc helps in minimizing overfitting while ensuring that the model adequately captures the underlying patterns in the data.
+```{r}
+# Select the best model based on the lowest AICc value
+best_model <- fit_mam 
+report(best_model)
+```
+
+## In an ETS(MAM) model:
+
+E stands for the error term, which is multiplicative.
+
+T stands for the trend component, which is additive.
+
+S stands for the seasonal component, which is multiplicative.
+
+The general form of the ETS(MAM) model equations are:
+$$
+y_t = (l_{t-1} + b_{t-1})s_{t-m}(1+ϵ_t)
+$$
+$$
+l_t = (l_{t-1} + b_{t-1})(1+αϵ_t)
+$$
+$$
+b_t = b_{t-1} + β(l_{t-1}+b_{t-1})ϵ_t
+$$
+$$
+s_t = s_{t-m} (1+γϵ_t)
+$$
+Where:
+
+$y_t$ is the observed value at time t.
+
+$l_t$ is the level component at time t.
+
+$b_t$ is the trend component at time t.
+
+$s_t$ is the seasonal component at time t.
+
+α, β, and γ are the smoothing parameters for the level, trend, and seasonal components, respectively.
+
+m is the period of seasonality.
+
+```{r}
+# Plot the fitted values
+best_model %>% augment()
+augment(best_model) %>%
+ggplot(aes(x = Date)) +
+geom_line(aes(y = FAAFFSS, colour = "Data")) +
+geom_line(aes(y = .fitted, colour = "Fitted")) +
+guides(colour = guide_legend(title = ""))
+```
+## Model Diagnostics:
+
+Residual Analysis: Perform residual diagnostics on the selected model to ensure that the residuals behave like white noise (i.e., they are uncorrelated and have constant variance).
+
+Components Decomposition: Decompose the selected model to inspect its components (level, trend, and seasonality) for better understanding and validation.
+```{r}
+# Residual diagnostics
+best_model %>% gg_tsresiduals()
+
+# Components Decomposition
+best_model %>%
+  components() %>% 
+  autoplot()
+```
+
+
+```{r}
+# Generate forecasts
+forecast_data <- best_model %>% forecast(h = 8)
+forecast_data
+forecast_data %>% autoplot(data) +
+  labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "FAAFFSS")
+```
+
+## Explanation of Prediction Intervals
+
+An advantage of ETS models is that prediction intervals can be constructed.
+Prediction intervals will differ between additive and multiplicative error models.
+
+For ETS(A,N/A/Ad,N/A) models prediction distributions are Gaussian.
+
+For ETS(M,N/A/Ad,N/A/M) models prediction distributions are non-Gaussian because of nonlinearity of the state space equations.
+
+Gaussian approximation usually give reasonably accurate results.
+
+If this approximation is not reasonable, we can generate future sample paths conditional on the last estimate of the states, and then to obtain prediction intervals from the percentiles of these simulated future paths.
+
+In the ETS model, the prediction interval is calculated based on the variance of the residuals. The ETS (MAM) model is a multiplicative error model, and the calculation of its prediction interval takes into account the gradual accumulation of prediction errors. Specifically, the prediction interval is calculated through the following steps:
+
+Calculate point prediction value: Based on the parameters of the ETS model and input data at future time points, calculate the future point prediction value.
+
+Estimate the variance of the forecast error: Use the variance of the residuals to estimate the variance of the forecast error. For the multiplicative error model, the variance of the error increases with forecast time.
+
+Calculate the prediction interval: Based on the variance of the prediction error and using the assumption of normal distribution, calculate the prediction interval at different confidence levels.
+
+In R, these steps are completed automatically by the forecast function, we only need to specify the forecast time range h.
+
+
+
 ## Arima Models
 
 ### Explore different ARIMA models
