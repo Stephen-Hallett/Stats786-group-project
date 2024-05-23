@@ -10,19 +10,116 @@ library(fpp3)
 library(kableExtra)
 library(gt)
 library(tidyverse)
+library(urca)
+library(forecast)
 ```
 
-### 1.
+### Import Data
+```{r}
+base_data = read_csv("qgdp_training.csv")
+data = base_data %>% 
+  select(Date, 
+         `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) %>% 
+  mutate(Date = yearquarter(Date)) %>% 
+  rename(FAAFFSS = `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
+data = as_tsibble(data, index=Date)
+rm(list="base_data") #Delete the original dataset
+
+```
+
+### Initialise Surrogate Test Functions
+```{r}
+# Function to perform surrogate test for independence
+surrogate.test = function(data, lag, N = 1000, test.stat = "ljung-box") {
+  
+  # data: a tsibble or numeric vector object
+  # lag: number of lags in portmanteau test statistic
+  # N: number of permutations to perform
+  # test.stat: either "ljung-box" or "box-pierce"
+  
+  if (is_tsibble(data)) {
+    if (length(measures(data)) != 1) {  
+      stop("data must be a tsibble with one measurement variable")
+    }
+    # Extract time series 
+    data = data %>% 
+      pull(as.character(measures(data)[[1]])) 
+  }
+
+  n = length(data)
+
+  Q.null = rep(NA, N)  # Open test statistic vectors
+  
+  if (test.stat == "ljung-box") {
+    
+    # Observed test statistic
+    r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
+    Q.obs = n * (n + 2) * sum(r.obs ^ 2 / (n - 1:lag))
+    
+    # Null distribution
+    for (i in 1:N) {
+      surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
+      r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]   # Estimate autocorrelation
+      Q.null[i] = n * (n + 2) * sum(r ^ 2 / (n - 1:lag))  # Ljung-Box test statistic
+    }
+    
+  }
+  
+  if (test.stat == "box-pierce") {
+    
+    # Observed test statistic
+    r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
+    Q.obs = n * sum(r.obs ^ 2)
+    
+    # Null distribution
+    for (i in 1:N) {
+      surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
+      r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]  # Estimate autocorrelation
+      Q.null[i] = n * sum(r ^ 2)                         # Box-Pierce test statistic
+    }
+    
+  }
+  
+  # Compute p-value
+  p.value = mean(Q.null >= Q.obs)  # p-value
+
+  # Output
+  output = list(Q.null = Q.null,
+                Q.obs = Q.obs,
+                test.stat = test.stat,
+                p.value = p.value)
+  
+  class(output) = "surrogate"
+  
+  return(output)
+  
+}
+
+
+# Function to plot surrogate null distribution and observed test statistic
+# Requires ggplot2
+plot.surrogate = function(obj, binwidth = 10) {
+  
+  # obj: Object of class "surrogate"
+  # binwidth: width of the bins for the histogram
+
+  ggplot(data = data.frame(Q = obj$Q.null),
+         mapping = aes(x = Q)) +
+    geom_histogram(fill = "navy", colour = "black", binwidth = binwidth) +
+    geom_vline(xintercept = obj$Q.obs,
+               linetype = "dashed") +
+    labs(x = "Test statistic",
+         y = "Count") 
+  
+}
+```
+
+
+
+# Exploratory Analysis
 This is a quarterly GDP data from 1987 Q4 to 2021 Q4 on the Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services industry groups in NZ. The data has been adjusted to the CPI of 2009/2010.
 
 ```{r}
-# data prep and formatting
-data = read_csv("qgdp_training.csv")
-data = data %>% mutate(Date = yearquarter(Date)) %>%
-  select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) 
-data = data %>% 
- as_tsibble(index = Date)
-
 # plots
 data %>% 
   autoplot() +
@@ -54,7 +151,7 @@ data %>%
   autoplot()
 
 decomposed_data = data %>%
-  model(STL(`Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services` ))
+  model(STL(FAAFFSS ))
 components(decomposed_data) %>% autoplot()
 
 ```
@@ -73,26 +170,13 @@ The correlation discussed earlier is reflected in the ACF plots. The correlation
 The STL composition highlights that the general trend contributes the most to the series, followed by the seasonality. The residuals contribute almost as much as the seasonality to the series. The general trend agrees what was discussed prior. The seasonality shows a clear change throughout the period, also in line with prior discussion, eg. Q4 GDP has significantly increased in the period. The effect of seasonality appear to have been decreasing initially up to around 2004 before increasing again.
 
 
+# ETS models
 
-### Import Data
-```{r}
-base_data = read_csv("qgdp_training.csv")
-data = base_data %>% 
-  select(Date, 
-         `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) %>% 
-  mutate(Date = yearquarter(Date)) %>% 
-  rename(FAAFFSS = `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
-data = as_tsibble(data, index=Date)
-rm(list="base_data") #Delete the original dataset
-
-data %>% autoplot() + 
-  labs(title="New Zealand Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services (FAAFFSS) GDP ($ Millions) from 1987Q2 to 2021Q4", x= "Quarter", y="FAAFFSS")
-```
-# Methodology to Create a Shortlist of Appropriate Candidate ETS Models
+## Methodology to Create a Shortlist of Appropriate Candidate ETS Models
 ```{r}
 # Check for missing values
 missing_values <- data %>% summarise(across(everything(), ~ sum(is.na(.))))
-print(missing_values)
+knitr::kable(missing_values)
 ```
 ## Manual Model Fitting:
 
@@ -184,7 +268,7 @@ aic_values <- bind_rows(
   glance(fit_auto) %>% mutate(Model = "AUTO_MAM"),
 ) %>% select(Model, AICc) %>% arrange(AICc)
 
-print(aic_values)
+knitr::kable(aic_values)
 ```
 
 ## Reasons for Selecting the ETS(MAM) Model: Lowest AICc Value
@@ -257,7 +341,7 @@ best_model %>%
   autoplot()
 ```
 
-
+### Generate ETS Forecasts
 ```{r}
 # Generate forecasts
 forecast_data <- best_model %>% forecast(h = 8)
@@ -289,21 +373,103 @@ Calculate the prediction interval: Based on the variance of the prediction error
 
 In R, these steps are completed automatically by the forecast function, we only need to specify the forecast time range h.
 
+```{r}
+# Assuming `best_model` is the ETS(MAM) model we selected earlier
+residuals_data <- best_model %>% augment() %>% pull(.resid)
+
+# Convert residuals to a tsibble for testing
+residuals_tsibble <- tsibble(Residuals = residuals_data, Date = data$Date, index = Date)
+
+# Perform surrogate test
+s = surrogate.test(residuals_tsibble, lag = 10, N = 1000, test.stat = "ljung-box")
+
+# Extract p-value
+s$p.value
+
+# Plot the surrogate null distribution and observed test statistic
+s %>% plot.surrogate() + theme_bw() + labs(title = "Surrogate Data Test with Ljung-Box Statistic")
+```
+## Explanation of the Surrogate Test for Independence
+
+The provided R code implements a surrogate test for independence on a time series dataset. This test is designed to determine if the residuals (or innovation residuals) of a model are independent, which is a key assumption in time series analysis. The surrogate test does this by comparing the observed autocorrelation structure of the residuals to a distribution of autocorrelation structures obtained from permuted (shuffled) versions of the data.
+
+### Interpretation of the p-value
+In the context of the surrogate test for independence, the p-value is used to determine whether we can reject the null hypothesis that the residuals are independent. The null hypothesis states that the residuals are independent (i.e., there is no significant autocorrelation in the residuals).
+
+### Significance Level
+A common significance level used in hypothesis testing is 0.05 (5%). If the p-value is less than 0.05, we reject the null hypothesis and conclude that there is significant autocorrelation in the residuals. If the p-value is greater than or equal to 0.05, we fail to reject the null hypothesis and conclude that there is no significant autocorrelation in the residuals.
+
+Since the p-value of our model is greater than the typical significance level of 0.05, we do not have enough evidence to reject the null hypothesis. This means that:
+
+The residuals of the ETS(MAM) model do not show significant autocorrelation.
+The residuals can be considered independent.
+
+### Conclusion
+
+The result of the surrogate test suggests that the residuals from the ETS(MAM) model are independent. This is a good outcome as it implies that the model has adequately captured the structure in the data, leaving behind residuals that behave like white noise, which is an important assumption in time series modeling.
 
 
-## Arima Models
+```{r}
+# Load the test data set
+test_data <- read.csv("qgdp_full.csv")
 
-### Explore different ARIMA models
+# Prepare the test data
+test_data <- test_data %>%
+  select(Date, `Fishing..Aquaculture.and.Agriculture..Forestry.and.Fishing.Support.Services`) %>%
+  mutate(Date = yearquarter(Date)) %>%
+  rename(FAAFFSS = `Fishing..Aquaculture.and.Agriculture..Forestry.and.Fishing.Support.Services`)
+test_data <- as_tsibble(test_data, index = Date)
+
+# Extract the relevant part of the test data (2022 Q1 to 2023 Q4)
+test_data_subset <- test_data %>%
+  filter(Date >= yearquarter("2022 Q1") & Date <= yearquarter("2023 Q4"))
+
+# Merge forecasts with actual test data
+comparison_data <- forecast_data %>%
+  left_join(test_data_subset, by = "Date") %>%
+  rename(Forecast = .mean, Actual = FAAFFSS.y) %>%
+  select(Date, Forecast, Actual)
+
+# Calculate accuracy metrics
+accuracy_metrics <- accuracy(comparison_data$Forecast, comparison_data$Actual)
+
+# Print accuracy metrics
+knitr::kable(accuracy_metrics)
+```
+
+## Discussion on Model Performance
+
+The ETS(MAM) model's performance in forecasting the GDP values for the "Fishing, Aquaculture, and Agriculture, Forestry, and Fishing Support Services" sector from 2022 Q1 to 2023 Q4 is evaluated using several accuracy metrics. 
+
+#### Overall Performance
+
+The ETS(MAM) model demonstrates a strong performance in forecasting the GDP for the sector in question. The low values of ME, MAE, MPE, and MAPE indicate that the model's forecasts are generally accurate and close to the actual values. The RMSE, while slightly higher, suggests that there are some larger errors, but they do not dominate the overall accuracy.
+
+#### Strengths and Limitations
+
+Strengths:
+The model captures the seasonal patterns and trends effectively, as evidenced by the low MAPE and MAE.
+The small positive bias indicates that the model slightly overestimates but is generally reliable.
+
+Limitations:
+The RMSE suggests that there are a few instances of larger errors. These may need further investigation to understand and potentially refine the model.
+The model could be improved by incorporating additional factors or using alternative modelling techniques to further reduce the forecast errors.
+
+In conclusion, the ETS(MAM) model provides reliable forecasts for the GDP values of the "Fishing, Aquaculture, and Agriculture, Forestry, and Fishing Support Services" sector, with a high degree of accuracy and only minor bias. Continuous monitoring and refinement could enhance the model's performance further.
+
+# Arima Models
+
+## Explore different ARIMA models
 
 ###  Explain any transformations or differencing required
 
-From data autoplot graph, we can see that
+From data autoplot graph, we can see:
 
 1. the seasonal variations are increasing over time which suggests a multiplicative seasonality pattern. So we would do a log transformation to stabilize the variance. This transformation converts multiplicative relationships into additive ones, making the series easier to model.
 
-2. the data seems have seasonal effects that repeat every 4 quarters. So we would also differencing for seasonality to remove this effect.
+2. the data seems to have a yearly seasonal effect that repeats every 4 quarters. So we would also perform differencing for seasonality to remove this effect.
 
-3.there is an upward trend indicates that the mean of the series is not constant over time. So we would need to do first difference to make the series stationary in terms of the trend. However, as the data have a strong seasonal pattern, we will apply seasonal differencing first, because sometimes the resulting series will be stationary and there will be no need for a further first difference.
+3.there is an upward trend indicates that the mean of the series is not constant over time. So we would need to do first difference to make the series stationary in terms of the trend. However, as the data has a strong seasonal pattern, we will apply seasonal differencing first, because sometimes the resulting series will be stationary and there will be no need for a further first difference.
 
 
 
@@ -315,7 +481,8 @@ data %>%
   labs(x = "x", y = "difference of y") + 
   theme_minimal() 
 ```
-so it moved the large of change in variability. variance roughly constant. 
+
+We can see that the log transformation of the data removed the large change in variability and made the variance roughly concept, perhaps except for the first few peaks around 1990.
 
 ```{r}
 # differencing seasonality
@@ -328,11 +495,10 @@ data %>%
 ```
 
 
-after differencing seasonality,  we can't see any patterns now. we removed the autocorrelation in seasonality. It also shows flat trend and the mean is roughly constant, which suggests we removed the trend by seasonal differencing and we don't need to to first order difference anymore. So we have stationary time series. 
+After differencing seasonality,  we can't see any non stationary patterns now. we removed the autocorrelation in seasonality. It also shows flat trend and the mean is roughly constant, which suggests we removed the trend by seasonal differencing and we don't need to to first order difference anymore. So we have a stationary time series. 
 
 
 ```{r}
-
 # test if now the time series data are stationary and non-seasonaly with KPSS test
 data  %>%
   features(FAAFFSS , unitroot_kpss)
@@ -340,9 +506,10 @@ data  %>%
 data  %>%
   features(difference(log(FAAFFSS), 4) , unitroot_kpss)
 ```
-so we can see the change of kpss after applying the transformation and difference. there is now no evidence against the null hypothesis. which means we get a stationary time series. 
 
-Or we can test how many difference we need to do to get a stationary time series. It shows 1 is enough, which with aligns with what we did. 
+We can see the change of kpss after applying the transformation and difference. There is now no evidence against the null hypothesis of non stationarity. which means we have a stationary time series. 
+
+Or we can test how many differences we need to do to get a stationary time series. It shows 1 is enough, which with aligns with what we have already seen. 
 
 ```{r}
 data %>%
@@ -366,13 +533,14 @@ features(FAAFFSS, unitroot_nsdiffs)
 Now we will check on the acf and pacf to help us decide appropriate candidate ARIMA models. 
 
 ```{r}
-data %>%gg_tsdisplay( log(FAAFFSS) %>% difference(4) , plot_type = "partial")
+data %>% gg_tsdisplay( log(FAAFFSS) %>% difference(4) , plot_type = "partial")
 
 ```
 
-For the autoregression process, we check the pacf plot and see that the significant peaks up to 4 and no significant peaks afterwards. it suggest 4 autoregressive terms. 
-likewise,for the moving average process, we check the acf plot and see significant peaks up to the order of 3 and no significant peaks afterwards. it suggest 3 moving average terms. 
-Now we add the manual fit and automatical fit together. 
+For the autoregression process, we check the pacf plot and see that there are two significant peaks up to 4, and no significant peaks afterwards. it suggest 4 autoregressive terms.   
+likewise,for the moving average process, we check the acf plot and see significant peaks up to the order of 3 and no significant peaks afterwards. it suggest 3 moving average terms.  
+  
+Now we add the manual fit and automatic fit together. 
 
 ```{r}
 
@@ -382,22 +550,19 @@ fit <- data %>%
         arima_413 = ARIMA(FAAFFSS ~ pdq(4, 1, 0)),
         stepwise = ARIMA(FAAFFSS),
         search = ARIMA(FAAFFSS, stepwise = FALSE))
-
-
 ```
 
 
-### Select the best model & explain why
+## Select the best model & explain why
 
-
-
-We compare the result of both manual and auto fit ARIMA model and select the model with smallest AICc as the best model. Here we will select the manually fitted one "arima_013" as our best model.  
+We compare the result of both manual and auto fit ARIMA model and select the model with smallest AICc as the best model. Here we will select the manually fitted one "arima_013" as our best model, although the search model had almost identical performance.  
 
 ```{r}
 
 glance(fit) %>% 
   arrange(AICc) %>% 
-  select(.model:BIC)
+  select(.model:BIC) %>% 
+  knitr::kable()
 ```
 
 
@@ -407,8 +572,6 @@ glance(fit) %>%
 fit %>%
   select(arima_013) %>%
   report()
-
-
 ```
 
 
@@ -447,7 +610,7 @@ Where:
 - \( \epsilon_t \) is the white noise error term at time \( t \).
 - \( \theta_1, \theta_2, \theta_3 \) are the parameters of the MA terms.
 
-### Produce residual diagnostic plots (ggtsresiduals())
+### Produce residual diagnostic plots
 
 ```{r}
 # Check residuals
@@ -493,9 +656,7 @@ Where:
 - \( \sigma_h \) is the standard error of the \( h \)-step ahead forecast.
 
 
-
-
-## Neural Network Auto Regression Model
+# Neural Network Auto Regression Model
 
 To understand how a Neural Network Auto Regression (NNAR) model works, its important to first understand the workings of a standard feed forward neural network.
 
@@ -515,11 +676,11 @@ Say we are fitting an NNAR(3,2,3) model on a dataset with yearly seasonality. He
   
 For our model we use the NNETAR() function to fit an NNAR model for us which will calculate optimal parameters for us. By default the model will determine p by fitting a linear model on the seasonally adjusted time series and taking the optimal number of lags according to AIC. The P parameter will automatically be set to 1, and the k parameter is set to (p + P + 1)/2.
 
-### Model fitting
+## Model fitting
 ```{r}
 NN.fit = data %>% 
   model(base_model = NNETAR()) %>% 
-  report(base_model)
+  report()
 
 NN.fit %>% gg_tsresiduals()
 
@@ -530,6 +691,10 @@ NN_forecast %>%
   labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)")
 ```
 
+### Report the fitted model
+
+We can see the NNAR model was wit with p = 1, P = 1, and k = 2, following the method of parameter choice we discussed prior. This suggests that the optimal number of lags according to AIC must have been 1.
+
 ### Prediction Interval Calculation
 
 Since the NNAR model is not based on a well defined stochastic model, there is not a straightforward method to calculate the prediction interval. To account for this, bootstrapping is done in order to determine the variability for each prediction.  
@@ -537,8 +702,7 @@ Since the NNAR model is not based on a well defined stochastic model, there is n
 The NNAR(1,1,2) model that we fit to the FAAFFSS data can be written as $y_t = f(z_{t-1}) + \epsilon_t$, where $z_t =  (y_{t-1}, y_{t-4})$ where the errors $\epsilon_t$ are assumed to be normally distributed around zero. Using this assumption, we can use our model to make a prediction for the next time period $y_{t+1}$ and add a bootstrapped error, either drawn from the normal distribution or taken from the sample of errors we saw in the training set. If we do this several times (The forecast function does it 1000 times by default) then we can approximate the prediction interval by finding the band which contains 80% and 95% of (predictions + errors) at the next time period. This process can be repeated for as many forecast periods as we like by using the most recent prediction as the input for the new predictions.
 
 
-
-### Assumption checking.
+# Assumption checking.
 
 Surrogate data testing is a method used in time series analysis to check whether the data can be described by a linear process. We first assume the data follows a linear process, then create several surrogate datasets using the original dataset through Monte Carlo methods. 
 
@@ -549,108 +713,17 @@ If the original data had some kind of significant structure or pattern, it shoul
 The next step is to calculate a differentiating statistic for both the original time series and the surrogate datasets. If the statistic calculated for the original time series differs significantly from the surrogate datasets, we reject the null hypothesis of linearity, that is, the original time series was non-linear.
 
 ```{r}
-data = read_csv("qgdp_training.csv")
-data = data %>% mutate(Date = yearquarter(Date)) %>%
-  select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
-tsibble = data %>% 
- as_tsibble(index = Date)
-
-# Function to perform surrogate test for independence
-surrogate.test = function(data, lag, N = 1000, test.stat = "ljung-box") {
-  
-  # data: a tsibble or numeric vector object
-  # lag: number of lags in portmanteau test statistic
-  # N: number of permutations to perform
-  # test.stat: either "ljung-box" or "box-pierce"
-  
-  if (is_tsibble(data)) {
-    if (length(measures(data)) != 1) {  
-      stop("data must be a tsibble with one measurement variable")
-    }
-    # Extract time series 
-    data = data %>% 
-      pull(as.character(measures(data)[[1]])) 
-  }
-
-  n = length(data)
-
-  Q.null = rep(NA, N)  # Open test statistic vectors
-  
-  if (test.stat == "ljung-box") {
-    
-    # Observed test statistic
-    r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
-    Q.obs = n * (n + 2) * sum(r.obs ^ 2 / (n - 1:lag))
-    
-    # Null distribution
-    for (i in 1:N) {
-      surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
-      r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]   # Estimate autocorrelation
-      Q.null[i] = n * (n + 2) * sum(r ^ 2 / (n - 1:lag))  # Ljung-Box test statistic
-    }
-    
-  }
-  
-  if (test.stat == "box-pierce") {
-    
-    # Observed test statistic
-    r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
-    Q.obs = n * sum(r.obs ^ 2)
-    
-    # Null distribution
-    for (i in 1:N) {
-      surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
-      r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]  # Estimate autocorrelation
-      Q.null[i] = n * sum(r ^ 2)                         # Box-Pierce test statistic
-    }
-    
-  }
-  
-  # Compute p-value
-  p.value = mean(Q.null >= Q.obs)  # p-value
-
-  # Output
-  output = list(Q.null = Q.null,
-                Q.obs = Q.obs,
-                test.stat = test.stat,
-                p.value = p.value)
-  
-  class(output) = "surrogate"
-  
-  return(output)
-  
-}
-
-
-# Function to plot surrogate null distribution and observed test statistic
-# Requires ggplot2
-plot.surrogate = function(obj, binwidth = 10) {
-  
-  # obj: Object of class "surrogate"
-  # binwidth: width of the bins for the histogram
-
-  ggplot(data = data.frame(Q = obj$Q.null),
-         mapping = aes(x = Q)) +
-    geom_histogram(fill = "navy", colour = "black", binwidth = binwidth) +
-    geom_vline(xintercept = obj$Q.obs,
-               linetype = "dashed") +
-    labs(x = "Test statistic",
-         y = "Count") 
-  
-}
-
-
 # Run surrogate test on the data
-s = surrogate.test(tsibble, lag = 8)
-print(paste("P-value for Ljung-Box statistic: ", s$p.value))
+s = surrogate.test(data, lag = 8)
+print(paste0("P-value for Ljung-Box statistic: ", s$p.value))
 
 s %>% 
   plot.surrogate(binwidth = 5) + 
   theme_bw() +
   labs(title = "Surrogate data test with Ljung-Box statistic")
 
-p = surrogate.test(tsibble, lag = 8, test.stat = "box-pierce")
-print(paste("P-value for Box-Pierce statistic: ", p$p.value))
+p = surrogate.test(data, lag = 8, test.stat = "box-pierce")
+print(paste0("P-value for Box-Pierce statistic: ", p$p.value))
 
 p %>% 
   plot.surrogate(binwidth = 5) + 
@@ -659,22 +732,20 @@ p %>%
 ```
 ### Explaining the r code
 
-Initally there is some data prep depending on the data format.
-
-surrogate.test calculates the observed test statistic and the null distribution according to the test statistic chosen. The observed test statistic is calculated using the autocorrelation function of the data. The null distribution is generated by permuting the data and calculating the test statistic for each permutation.
+Surrogate.test calculates the observed test statistic and the null distribution according to the test statistic chosen. The observed test statistic is calculated using the autocorrelation function of the data. The null distribution is generated by permuting the data and calculating the test statistic for each permutation.
 
 The p-value is then calculated as the proportion of the null distribution that is greater than or equal to the observed test statistic.
 
 The function returns a list containing the null distribution, the observed test statistic, the test statistic used, and the p-value.
 
-plot.surrogate. function plots the surrogate null distribution and the observed test statistic, using the output from surrogate.test. A histogram is plotted for the surrogate test statistics and a vertical dashed line is plotted for the observed test statistic calculated from the original data. I modified this to include a parameter for the histogram bar width.
+The plot.surrogate() function plots the surrogate null distribution and the observed test statistic, using the output from surrogate.test. A histogram is plotted for the surrogate test statistics and a vertical dashed line is plotted for the observed test statistic calculated from the original data. I modified this to include a parameter for the histogram bar width.
 
 ### The results
 
 The p-value for both statistics is 0 and from the graph it is clear why that is the case. The vertical dashed line (observed test statistic) is far away from the histogram. Hence we reject the null hypothesis of independence in the residuals.
 
 
-### Forecasting accuracy
+# Forecasting accuracy
 
 ```{r}
 full_data = read_csv("qgdp_full.csv")
@@ -684,16 +755,56 @@ full_data = full_data %>% mutate(Date = yearquarter(Date)) %>%
 full_data = full_data %>% 
  as_tsibble(index = Date)
 
-accuracy(forecast_data, full_data)
-accuracy(ARIMA_forecast, full_data)
-accuracy(NN_forecast, full_data)
+rbind(
+  as.matrix(accuracy(forecast_data, full_data)),
+  as.matrix(accuracy(ARIMA_forecast, full_data)),
+  as.matrix(accuracy(NN_forecast, full_data))
+) %>% 
+  knitr::kable()
+
+all_forecasts = test_data_subset %>%
+  left_join(forecast_data, by = "Date") %>%
+  rename(ETS_Forecast = .mean, Actual = FAAFFSS.x) %>%
+  left_join(ARIMA_forecast, by = "Date") %>%
+  rename(ARIMA_Forecast = .mean) %>%
+  left_join(NN_forecast, by = "Date") %>%
+  rename(NNAR_Forecast = .mean) %>%
+  select(Date,
+         ETS_Forecast,
+         ARIMA_Forecast,
+         NNAR_Forecast,
+         Actual)
+
+# Plot forecasts vs actual values
+all_forecasts %>%
+  pivot_longer(cols = -Date, names_to = "Predictor", values_to = "Value") %>% 
+  ggplot(aes(x = Date, y = Value, color = Predictor)) +
+  geom_line() +
+  labs(title = "Forecasts vs Actual Values for FAAFFSS GDP", x = "Date", y = "GDP") +
+  theme_minimal()
 ```
 
 The NNAR forecast has the lowest MASE. The ARIMA model has a lower MASE than the ETS model but they are not too different. Using MASE as the measure NNAR made by far the best forecast. Other error measures also suggest that the NNAR made the best predictions, it has the lowest RMSE, MAE, MAPE, RMSSE and has an MPE and ME closest to 0. The ARIMA model did better than the ETS model on 6 of the 7 error measures (not ME), although not by much, so it is a distant second.
 
 
+# Member Contributions
+## Yuan (ych150)
+- ARIMA implementation & writeup
+- Assisted with managing github
 
+## Stephen (shal797)
+- NNAR Implementation & writeup
+- Managing meetings, github & submission
+- Final touch ups and collation
 
+## Yuxiao (wany441)
+- ETS implementation & writeup
+- Assisted with test set forecast comparisons
+
+## Bill (wany803)
+- Exploratory analysis
+- Assumption checking
+- Test set forecast comparisons
 
 
 
