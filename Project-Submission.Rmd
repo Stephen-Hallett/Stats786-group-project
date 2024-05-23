@@ -500,25 +500,19 @@ ARIMA_forecast %>%
 
 ###  Explain how prediction intervals are calculated for the method
 
-Prediction intervals provide a range within which future observations are expected to fall with a certain probability, typically 95%. Here's how prediction intervals are calculated for an ARIMA model:
+A SARIMA model is denoted as ARIMA(p,d,q)(P,D,Q)[s].Once the SARIMA model is fitted, forecasts are generated. 
+The forecast error variance for a given horizon ℎ considers both non-seasonal and seasonal components. The variance increases with the forecast horizon due to the accumulation of uncertainty over time. and prediction intervals increase as ℎ increases.
 
-1. **Forecast Error Variance**: The prediction interval is based on the forecast error variance, which increases with the forecast horizon. For an ARIMA model, the forecast error at time \( t+h \) is calculated using the moving average (MA) process.
-
-2. **Standard Error of Forecast**: For an \( h \)-step ahead forecast, the standard error \( \sigma_h \) can be computed using the residuals of the fitted model and the MA terms.
-
-The standard error \( \sigma_h \) accounts for the model parameters and the white noise variance. It includes the accumulation of forecast uncertainty as the horizon \( h \) increases.
-
-3. **Prediction Interval Formula**:  For a 95% confidence interval, the critical value \( z_{0.025} \) is 1.96. Using the forecasted values and the calculated standard error, construct the prediction intervals. 
+In Prediction intervals calculations, it assume residuals are uncorrelated and normally distributed. so the PI are based on the forecast error variance and the critical values from the standard normal distribution. 
+If the model fails the assumption, like it fails the Ljung-Box test, the prediction intervals may not be accurate due to correlated residuals.
 
 $$
 \hat{Y}_{t+h} \pm z_{\alpha/2} \cdot \sigma_h
 $$
-
 Where:
 - \( \hat{Y}_{t+h} \) is the forecasted value for time \( t+h \).
 - \( z_{\alpha/2} \) is the critical value from the standard normal distribution for the desired confidence level (e.g., 1.96 for 95% confidence).
-- \( \sigma_h \) is the standard error of the \( h \)-step ahead forecast.
-
+- \( \sigma_h \) is the standard deviation of the forecast errors at horizon ℎ
 
 
 
