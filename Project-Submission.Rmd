@@ -523,11 +523,11 @@ NN.fit = data %>%
 
 NN.fit %>% gg_tsresiduals()
 
-NN.fit %>% 
-  forecast(h=8) %>% 
-  autoplot(data) + 
-  labs(title="FAAFFSS GDP ($ Millions) Predictions Using NNETAR Models", x= "Quarter", y="FAAFFSS")
-
+NN_forecast = NN.fit %>% 
+  forecast(h=8) 
+NN_forecast %>% 
+  autoplot(data) +
+  labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)")
 ```
 
 ### Prediction Interval Calculation
