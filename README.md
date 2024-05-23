@@ -646,7 +646,7 @@ we only need to specify the forecast time range h.
     # Extract p-value
     s$p.value
 
-    ## [1] 0.192
+    ## [1] 0.211
 
     # Plot the surrogate null distribution and observed test statistic
     s %>% plot.surrogate() + theme_bw() + labs(title = "Surrogate Data Test with Ljung-Box Statistic")
@@ -1111,35 +1111,26 @@ independence have been met.
 
 ### Explain how prediction intervals are calculated for the method
 
-Prediction intervals provide a range within which future observations
-are expected to fall with a certain probability, typically 95%. Here’s
-how prediction intervals are calculated for an ARIMA model:
+A SARIMA model is denoted as ARIMA(p,d,q)(P,D,Q)\[s\].Once the SARIMA
+model is fitted, forecasts are generated. The forecast error variance
+for a given horizon ℎ considers both non-seasonal and seasonal
+components. The variance increases with the forecast horizon due to the
+accumulation of uncertainty over time. and prediction intervals increase
+as ℎ increases.
 
-1.  **Forecast Error Variance**: The prediction interval is based on the
-    forecast error variance, which increases with the forecast horizon.
-    For an ARIMA model, the forecast error at time *t* + *h* is
-    calculated using the moving average (MA) process.
-
-2.  **Standard Error of Forecast**: For an *h*-step ahead forecast, the
-    standard error *σ*<sub>*h*</sub> can be computed using the residuals
-    of the fitted model and the MA terms.
-
-The standard error *σ*<sub>*h*</sub> accounts for the model parameters
-and the white noise variance. It includes the accumulation of forecast
-uncertainty as the horizon *h* increases.
-
-1.  **Prediction Interval Formula**: For a 95% confidence interval, the
-    critical value *z*<sub>0.025</sub> is 1.96. Using the forecasted
-    values and the calculated standard error, construct the prediction
-    intervals.
+In Prediction intervals calculations, it assume residuals are
+uncorrelated and normally distributed. so the PI are based on the
+forecast error variance and the critical values from the standard normal
+distribution. If the model fails the assumption, like it fails the
+Ljung-Box test, the prediction intervals may not be accurate due to
+correlated residuals.
 
 *Ŷ*<sub>*t* + *h*</sub> ± *z*<sub>*α*/2</sub> ⋅ *σ*<sub>*h*</sub>
-
 Where: - *Ŷ*<sub>*t* + *h*</sub> is the forecasted value for time
 *t* + *h*. - *z*<sub>*α*/2</sub> is the critical value from the standard
 normal distribution for the desired confidence level (e.g., 1.96 for 95%
-confidence). - *σ*<sub>*h*</sub> is the standard error of the *h*-step
-ahead forecast.
+confidence). - *σ*<sub>*h*</sub> is the standard deviation of the
+forecast errors at horizon ℎ
 
 # Neural Network Auto Regression Model
 
@@ -1230,7 +1221,7 @@ to (p + P + 1)/2.
     ## a 2-2-1 network with 9 weights
     ## options were - linear output units 
     ## 
-    ## sigma^2 estimated as 486.3
+    ## sigma^2 estimated as 483.9
 
     NN.fit %>% gg_tsresiduals()
 
@@ -1438,14 +1429,14 @@ season(“M”))</td>
 <tr class="odd">
 <td style="text-align: left;">base_model</td>
 <td style="text-align: left;">Test</td>
-<td style="text-align: left;">-0.4065285</td>
-<td style="text-align: left;">10.10265</td>
-<td style="text-align: left;">7.700639</td>
-<td style="text-align: left;">-0.087452</td>
-<td style="text-align: left;">1.215663</td>
-<td style="text-align: left;">0.3341647</td>
-<td style="text-align: left;">0.3551381</td>
-<td style="text-align: left;">0.2156749</td>
+<td style="text-align: left;">3.327968</td>
+<td style="text-align: left;">9.775642</td>
+<td style="text-align: left;">8.211171</td>
+<td style="text-align: left;">0.4989521</td>
+<td style="text-align: left;">1.284776</td>
+<td style="text-align: left;">0.3563189</td>
+<td style="text-align: left;">0.3436429</td>
+<td style="text-align: left;">0.1623906</td>
 </tr>
 </tbody>
 </table>
