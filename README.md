@@ -1,3 +1,133 @@
+### 1.
+
+This is a quarterly GDP data from 1987 Q4 to 2021 Q4 on the Fishing,
+Aquaculture and Agriculture, Forestry and Fishing Support Services
+industry groups in NZ. The data has been adjusted to the CPI of
+2009/2010.
+
+    # data prep and formatting
+    data = read_csv("qgdp_training.csv")
+
+    ## Rows: 139 Columns: 34
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr  (1): Date
+    ## dbl (33): Agriculture, Forestry and Logging, Fishing, Aquaculture and Agricu...
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+    data = data %>% mutate(Date = yearquarter(Date)) %>%
+      select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) 
+    data = data %>% 
+     as_tsibble(index = Date)
+
+    # plots
+    data %>% 
+      autoplot() +
+      labs(title = "Quarterly GDP for Aquaculture and Agriculture and Forestry in NZ",
+           x = "Year Quarter",
+           y = "Millions ($)")
+
+    ## Plot variable not specified, automatically selected `.vars = Fishing,
+    ## Aquaculture and Agriculture, Forestry and Fishing Support Services`
+
+![](README_files/figure-markdown_strict/unnamed-chunk-1-1.png)
+
+    data %>% 
+      gg_subseries() +
+      labs(title = "Subseries quarterly GDP for Aquaculture and Agriculture and Forestry in NZ",
+           x = "Year",
+           y = "Millions ($)")
+
+    ## Plot variable not specified, automatically selected `y = Fishing, Aquaculture
+    ## and Agriculture, Forestry and Fishing Support Services`
+
+![](README_files/figure-markdown_strict/unnamed-chunk-1-2.png)
+
+    data %>% 
+      gg_season() +
+      labs(title = "Seasonal plot for quarterly GDP for Aquaculture and Agriculture and Forestry in NZ",
+           x = "Year",
+           y = "Millions ($)")
+
+    ## Plot variable not specified, automatically selected `y = Fishing, Aquaculture
+    ## and Agriculture, Forestry and Fishing Support Services`
+
+![](README_files/figure-markdown_strict/unnamed-chunk-1-3.png)
+
+    data %>% 
+      gg_lag() +
+      labs(title = "Lag plots for quarterly GDP for Aquaculture and Agriculture and Forestry in NZ",
+           x = "lag(Millions ($), n)",
+           y = "Millions ($)") +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+    ## Plot variable not specified, automatically selected `y = Fishing, Aquaculture
+    ## and Agriculture, Forestry and Fishing Support Services`
+
+![](README_files/figure-markdown_strict/unnamed-chunk-1-4.png)
+
+    data %>% 
+      ACF() %>%
+      autoplot()
+
+    ## Response variable not specified, automatically selected `var = Fishing,
+    ## Aquaculture and Agriculture, Forestry and Fishing Support Services`
+
+![](README_files/figure-markdown_strict/unnamed-chunk-1-5.png)
+
+    decomposed_data = data %>%
+      model(STL(`Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services` ))
+    components(decomposed_data) %>% autoplot()
+
+![](README_files/figure-markdown_strict/unnamed-chunk-1-6.png)
+
+The time plot shows a general steady growth up of GDP until around 2008,
+the trend dipped for 2 years during the economic crisis before steady
+growth back up after 2010 Q1 at a faster rate. There appears to be some
+quarterly seasonality however this seasonality appear to have morphed
+during the period in this plot. It is a bit difficult to tell from this
+plot what is happening.
+
+The subseries plot shows the GDP changes by the quarter, the quarter all
+followed the general pattern discussed earlier. However this plot shows
+that on average Q2 seems to have the lowest GDP out of all the quarters.
+Quarters 1, 3, 4 appear to not be to different from each other on
+average. Q3 seemed to have had a slower growth than the rest up until
+about 2008. The differences in the quarters suggests a quarterly
+pattern.
+
+The seasonal plot shows that the are somewhat regular seasonal patterns,
+however seasonality may have changed throughout the period as suspected
+previously. Q3 was had the highest GDP during the earlier years and Q2/4
+had the lowest GDP. As time progressed the GDP in Q4 became the highest.
+This plot also shows the general increasing tread with time looking at
+how later years have higher lines, the jumbled lines in the middle of
+the graph reflects the GDP decrease during 2008 to 2010.
+
+The lag plots shows that each quarter is strongly correlated with the
+previous quarter, the fuzzier lines with more lag shows that this
+correlation weakens with more lag. However on lags divisible by 4, that
+is the same time in a different year, the correlation becomes a bit
+stronger than nearby lags, the graph showed the lines are more closely
+on the diagonal in these lags. So there is a seasonal pattern
+
+The correlation discussed earlier is reflected in the ACF plots. The
+correlation decreases with more lags but there is a small spike when the
+lag is divisible by 4, showing a slightly stronger correlation with a
+lagged version of itself that is at the same time in a different year,
+ie. a seasonal pattern.
+
+The STL composition highlights that the general trend contributes the
+most to the series, followed by the seasonality. The residuals
+contribute almost as much as the seasonality to the series. The general
+trend agrees what was discussed prior. The seasonality shows a clear
+change throughout the period, also in line with prior discussion, eg. Q4
+GDP has significantly increased in the period. The effect of seasonality
+appear to have been decreasing initially up to around 2004 before
+increasing again.
+
 ### Import Data
 
     base_data = read_csv("qgdp_training.csv")
@@ -24,7 +154,7 @@
 
     ## Plot variable not specified, automatically selected `.vars = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-1.png) \#
+![](README_files/figure-markdown_strict/unnamed-chunk-2-1.png) \#
 Methodology to Create a Shortlist of Appropriate Candidate ETS Models
 
     # Check for missing values
@@ -271,7 +401,7 @@ m is the period of seasonality.
     geom_line(aes(y = .fitted, colour = "Fitted")) +
     guides(colour = guide_legend(title = ""))
 
-![](README_files/figure-markdown_strict/unnamed-chunk-7-1.png) \## Model
+![](README_files/figure-markdown_strict/unnamed-chunk-8-1.png) \## Model
 Diagnostics:
 
 Residual Analysis: Perform residual diagnostics on the selected model to
@@ -285,7 +415,7 @@ validation.
     # Residual diagnostics
     best_model %>% gg_tsresiduals()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-8-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-9-1.png)
 
     # Components Decomposition
     best_model %>%
@@ -295,7 +425,7 @@ validation.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-8-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-9-2.png)
 
     # Generate forecasts
     forecast_data <- best_model %>% forecast(h = 8)
@@ -317,7 +447,7 @@ validation.
     forecast_data %>% autoplot(data) +
       labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "FAAFFSS")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-9-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-10-1.png)
 
 ## Explanation of Prediction Intervals
 
@@ -390,7 +520,7 @@ be no need for a further first difference.
       labs(x = "x", y = "difference of y") + 
       theme_minimal() 
 
-![](README_files/figure-markdown_strict/unnamed-chunk-10-1.png) so it
+![](README_files/figure-markdown_strict/unnamed-chunk-11-1.png) so it
 moved the large of change in variability. variance roughly constant.
 
     # differencing seasonality
@@ -403,7 +533,7 @@ moved the large of change in variability. variance roughly constant.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-11-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png)
 
 after differencing seasonality, we can’t see any patterns now. we
 removed the autocorrelation in seasonality. It also shows flat trend and
@@ -475,7 +605,7 @@ candidate ARIMA models.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-16-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-17-1.png)
 
 For the autoregression process, we check the pacf plot and see that the
 significant peaks up to 4 and no significant peaks afterwards. it
@@ -560,17 +690,19 @@ the MA terms.
       select(arima_013) %>%
       gg_tsresiduals()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-20-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-21-1.png)
 
 ### Produce forecasts for h=8 quarters
 
-    fit %>% 
+    ARIMA_forecast = fit %>% 
       select(arima_013) %>%
-      forecast(h = 8) %>%
+      forecast(h = 8) 
+    ARIMA_forecast %>%
       autoplot(data) + 
+      labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)") +
       theme_minimal()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-21-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-22-1.png)
 
 ### Explain how prediction intervals are calculated for the method
 
@@ -693,7 +825,7 @@ to (p + P + 1)/2.
     ## a 2-2-1 network with 9 weights
     ## options were - linear output units 
     ## 
-    ## sigma^2 estimated as 490.8
+    ## sigma^2 estimated as 488.5
 
     NN.fit %>% gg_tsresiduals()
 
@@ -706,14 +838,15 @@ to (p + P + 1)/2.
     ## Warning: Removed 4 rows containing non-finite outside the scale range
     ## (`stat_bin()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-22-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-23-1.png)
 
-    NN.fit %>% 
-      forecast(h=8) %>% 
-      autoplot(data) + 
-      labs(title="FAAFFSS GDP ($ Millions) Predictions Using NNETAR Models", x= "Quarter", y="FAAFFSS")
+    NN_forecast = NN.fit %>% 
+      forecast(h=8) 
+    NN_forecast %>% 
+      autoplot(data) +
+      labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-22-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-23-2.png)
 
 ### Prediction Interval Calculation
 
@@ -735,3 +868,228 @@ we can approximate the prediction interval by finding the band which
 contains 80% and 95% of (predictions + errors) at the next time period.
 This process can be repeated for as many forecast periods as we like by
 using the most recent prediction as the input for the new predictions.
+
+### Assumption checking.
+
+Surrogate data testing is a method used in time series analysis to check
+whether the data can be described by a linear process. We first assume
+the data follows a linear process, then create several surrogate
+datasets using the original dataset through Monte Carlo methods.
+
+A common way to create these surrogate datasets is the Random Shuffle
+method, where surrogate data is generated from shuffling the original
+data like a deck of cards. This method destroys any temporal structure
+or pattern but keeps the overall distribution of values untouched.
+
+If the original data had some kind of significant structure or pattern,
+it should stand out when compared to the shuffled surrogate data.
+
+The next step is to calculate a differentiating statistic for both the
+original time series and the surrogate datasets. If the statistic
+calculated for the original time series differs significantly from the
+surrogate datasets, we reject the null hypothesis of linearity, that is,
+the original time series was non-linear.
+
+    data = read_csv("qgdp_training.csv")
+
+    ## Rows: 139 Columns: 34
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr  (1): Date
+    ## dbl (33): Agriculture, Forestry and Logging, Fishing, Aquaculture and Agricu...
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+    data = data %>% mutate(Date = yearquarter(Date)) %>%
+      select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
+    tsibble = data %>% 
+     as_tsibble(index = Date)
+
+    # Function to perform surrogate test for independence
+    surrogate.test = function(data, lag, N = 1000, test.stat = "ljung-box") {
+      
+      # data: a tsibble or numeric vector object
+      # lag: number of lags in portmanteau test statistic
+      # N: number of permutations to perform
+      # test.stat: either "ljung-box" or "box-pierce"
+      
+      if (is_tsibble(data)) {
+        if (length(measures(data)) != 1) {  
+          stop("data must be a tsibble with one measurement variable")
+        }
+        # Extract time series 
+        data = data %>% 
+          pull(as.character(measures(data)[[1]])) 
+      }
+
+      n = length(data)
+
+      Q.null = rep(NA, N)  # Open test statistic vectors
+      
+      if (test.stat == "ljung-box") {
+        
+        # Observed test statistic
+        r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
+        Q.obs = n * (n + 2) * sum(r.obs ^ 2 / (n - 1:lag))
+        
+        # Null distribution
+        for (i in 1:N) {
+          surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
+          r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]   # Estimate autocorrelation
+          Q.null[i] = n * (n + 2) * sum(r ^ 2 / (n - 1:lag))  # Ljung-Box test statistic
+        }
+        
+      }
+      
+      if (test.stat == "box-pierce") {
+        
+        # Observed test statistic
+        r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
+        Q.obs = n * sum(r.obs ^ 2)
+        
+        # Null distribution
+        for (i in 1:N) {
+          surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
+          r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]  # Estimate autocorrelation
+          Q.null[i] = n * sum(r ^ 2)                         # Box-Pierce test statistic
+        }
+        
+      }
+      
+      # Compute p-value
+      p.value = mean(Q.null >= Q.obs)  # p-value
+
+      # Output
+      output = list(Q.null = Q.null,
+                    Q.obs = Q.obs,
+                    test.stat = test.stat,
+                    p.value = p.value)
+      
+      class(output) = "surrogate"
+      
+      return(output)
+      
+    }
+
+
+    # Function to plot surrogate null distribution and observed test statistic
+    # Requires ggplot2
+    plot.surrogate = function(obj, binwidth = 10) {
+      
+      # obj: Object of class "surrogate"
+      # binwidth: width of the bins for the histogram
+
+      ggplot(data = data.frame(Q = obj$Q.null),
+             mapping = aes(x = Q)) +
+        geom_histogram(fill = "navy", colour = "black", binwidth = binwidth) +
+        geom_vline(xintercept = obj$Q.obs,
+                   linetype = "dashed") +
+        labs(x = "Test statistic",
+             y = "Count") 
+      
+    }
+
+
+    # Run surrogate test on the data
+    s = surrogate.test(tsibble, lag = 8)
+    print(paste("P-value for Ljung-Box statistic: ", s$p.value))
+
+    ## [1] "P-value for Ljung-Box statistic:  0"
+
+    s %>% 
+      plot.surrogate(binwidth = 5) + 
+      theme_bw() +
+      labs(title = "Surrogate data test with Ljung-Box statistic")
+
+![](README_files/figure-markdown_strict/unnamed-chunk-24-1.png)
+
+    p = surrogate.test(tsibble, lag = 8, test.stat = "box-pierce")
+    print(paste("P-value for Box-Pierce statistic: ", p$p.value))
+
+    ## [1] "P-value for Box-Pierce statistic:  0"
+
+    p %>% 
+      plot.surrogate(binwidth = 5) + 
+      theme_bw() +
+      labs(title = "Surrogate data test with Box-Pierce statistic")
+
+![](README_files/figure-markdown_strict/unnamed-chunk-24-2.png) \###
+Explaining the r code
+
+Initally there is some data prep depending on the data format.
+
+surrogate.test calculates the observed test statistic and the null
+distribution according to the test statistic chosen. The observed test
+statistic is calculated using the autocorrelation function of the data.
+The null distribution is generated by permuting the data and calculating
+the test statistic for each permutation.
+
+The p-value is then calculated as the proportion of the null
+distribution that is greater than or equal to the observed test
+statistic.
+
+The function returns a list containing the null distribution, the
+observed test statistic, the test statistic used, and the p-value.
+
+plot.surrogate. function plots the surrogate null distribution and the
+observed test statistic, using the output from surrogate.test. A
+histogram is plotted for the surrogate test statistics and a vertical
+dashed line is plotted for the observed test statistic calculated from
+the original data. I modified this to include a parameter for the
+histogram bar width.
+
+### The results
+
+The p-value for both statistics is 0 and from the graph it is clear why
+that is the case. The vertical dashed line (observed test statistic) is
+far away from the histogram. Hence we reject the null hypothesis of
+independence in the residuals.
+
+### Forecasting accuracy
+
+    full_data = read_csv("qgdp_full.csv")
+
+    ## Rows: 147 Columns: 34
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr  (1): Date
+    ## dbl (33): Agriculture, Forestry and Logging, Fishing, Aquaculture and Agricu...
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+    full_data = full_data %>% mutate(Date = yearquarter(Date)) %>%
+      select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) %>%
+      rename(FAAFFSS = `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
+    full_data = full_data %>% 
+     as_tsibble(index = Date)
+
+    accuracy(forecast_data, full_data)
+
+    ## # A tibble: 1 × 10
+    ##   .model                   .type    ME  RMSE   MAE   MPE  MAPE  MASE RMSSE  ACF1
+    ##   <chr>                    <chr> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
+    ## 1 "ETS(FAAFFSS ~ error(\"… Test   9.28  19.5  16.7  1.54  2.65 0.724 0.687 0.149
+
+    accuracy(ARIMA_forecast, full_data)
+
+    ## # A tibble: 1 × 10
+    ##   .model    .type    ME  RMSE   MAE   MPE  MAPE  MASE RMSSE  ACF1
+    ##   <chr>     <chr> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
+    ## 1 arima_013 Test  -9.40  18.8  15.7 -1.40  2.44 0.680 0.661 0.197
+
+    accuracy(NN_forecast, full_data)
+
+    ## # A tibble: 1 × 10
+    ##   .model     .type    ME  RMSE   MAE    MPE  MAPE  MASE RMSSE  ACF1
+    ##   <chr>      <chr> <dbl> <dbl> <dbl>  <dbl> <dbl> <dbl> <dbl> <dbl>
+    ## 1 base_model Test  -2.61  11.3  8.29 -0.436  1.32 0.360 0.397 0.212
+
+The NNAR forecast has the lowest MASE. The ARIMA model has a lower MASE
+than the ETS model but they are not too different. Using MASE as the
+measure NNAR made by far the best forecast. Other error measures also
+suggest that the NNAR made the best predictions, it has the lowest RMSE,
+MAE, MAPE, RMSSE and has an MPE and ME closest to 0. The ARIMA model did
+better than the ETS model on 6 of the 7 error measures (not ME),
+although not by much, so it is a distant second.
