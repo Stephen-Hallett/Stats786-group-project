@@ -461,10 +461,12 @@ fit %>%
 ###  Produce forecasts for h=8 quarters
 
 ```{r}
-fit %>% 
+ARIMA_forecast = fit %>% 
   select(arima_013) %>%
-  forecast(h = 8) %>%
+  forecast(h = 8) 
+ARIMA_forecast %>%
   autoplot(data) + 
+  labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)") +
   theme_minimal()
 ```
 
