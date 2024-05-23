@@ -1,12 +1,6 @@
-### 1.
+### Import Data
 
-This is a quarterly GDP data from 1987 Q4 to 2021 Q4 on the Fishing,
-Aquaculture and Agriculture, Forestry and Fishing Support Services
-industry groups in NZ. The data has been adjusted to the CPI of
-2009/2010.
-
-    # data prep and formatting
-    data = read_csv("qgdp_training.csv")
+    base_data = read_csv("qgdp_training.csv")
 
     ## Rows: 139 Columns: 34
     ## ── Column specification ────────────────────────────────────────────────────────
@@ -17,10 +11,106 @@ industry groups in NZ. The data has been adjusted to the CPI of
     ## ℹ Use `spec()` to retrieve the full column specification for this data.
     ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 
-    data = data %>% mutate(Date = yearquarter(Date)) %>%
-      select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) 
-    data = data %>% 
-     as_tsibble(index = Date)
+    data = base_data %>% 
+      select(Date, 
+             `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) %>% 
+      mutate(Date = yearquarter(Date)) %>% 
+      rename(FAAFFSS = `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
+    data = as_tsibble(data, index=Date)
+    rm(list="base_data") #Delete the original dataset
+
+### Initialise Surrogate Test Functions
+
+    # Function to perform surrogate test for independence
+    surrogate.test = function(data, lag, N = 1000, test.stat = "ljung-box") {
+      
+      # data: a tsibble or numeric vector object
+      # lag: number of lags in portmanteau test statistic
+      # N: number of permutations to perform
+      # test.stat: either "ljung-box" or "box-pierce"
+      
+      if (is_tsibble(data)) {
+        if (length(measures(data)) != 1) {  
+          stop("data must be a tsibble with one measurement variable")
+        }
+        # Extract time series 
+        data = data %>% 
+          pull(as.character(measures(data)[[1]])) 
+      }
+
+      n = length(data)
+
+      Q.null = rep(NA, N)  # Open test statistic vectors
+      
+      if (test.stat == "ljung-box") {
+        
+        # Observed test statistic
+        r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
+        Q.obs = n * (n + 2) * sum(r.obs ^ 2 / (n - 1:lag))
+        
+        # Null distribution
+        for (i in 1:N) {
+          surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
+          r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]   # Estimate autocorrelation
+          Q.null[i] = n * (n + 2) * sum(r ^ 2 / (n - 1:lag))  # Ljung-Box test statistic
+        }
+        
+      }
+      
+      if (test.stat == "box-pierce") {
+        
+        # Observed test statistic
+        r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
+        Q.obs = n * sum(r.obs ^ 2)
+        
+        # Null distribution
+        for (i in 1:N) {
+          surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
+          r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]  # Estimate autocorrelation
+          Q.null[i] = n * sum(r ^ 2)                         # Box-Pierce test statistic
+        }
+        
+      }
+      
+      # Compute p-value
+      p.value = mean(Q.null >= Q.obs)  # p-value
+
+      # Output
+      output = list(Q.null = Q.null,
+                    Q.obs = Q.obs,
+                    test.stat = test.stat,
+                    p.value = p.value)
+      
+      class(output) = "surrogate"
+      
+      return(output)
+      
+    }
+
+
+    # Function to plot surrogate null distribution and observed test statistic
+    # Requires ggplot2
+    plot.surrogate = function(obj, binwidth = 10) {
+      
+      # obj: Object of class "surrogate"
+      # binwidth: width of the bins for the histogram
+
+      ggplot(data = data.frame(Q = obj$Q.null),
+             mapping = aes(x = Q)) +
+        geom_histogram(fill = "navy", colour = "black", binwidth = binwidth) +
+        geom_vline(xintercept = obj$Q.obs,
+                   linetype = "dashed") +
+        labs(x = "Test statistic",
+             y = "Count") 
+      
+    }
+
+# Exploratory Analysis
+
+This is a quarterly GDP data from 1987 Q4 to 2021 Q4 on the Fishing,
+Aquaculture and Agriculture, Forestry and Fishing Support Services
+industry groups in NZ. The data has been adjusted to the CPI of
+2009/2010.
 
     # plots
     data %>% 
@@ -29,10 +119,9 @@ industry groups in NZ. The data has been adjusted to the CPI of
            x = "Year Quarter",
            y = "Millions ($)")
 
-    ## Plot variable not specified, automatically selected `.vars = Fishing,
-    ## Aquaculture and Agriculture, Forestry and Fishing Support Services`
+    ## Plot variable not specified, automatically selected `.vars = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-1.png)
 
     data %>% 
       gg_subseries() +
@@ -40,10 +129,9 @@ industry groups in NZ. The data has been adjusted to the CPI of
            x = "Year",
            y = "Millions ($)")
 
-    ## Plot variable not specified, automatically selected `y = Fishing, Aquaculture
-    ## and Agriculture, Forestry and Fishing Support Services`
+    ## Plot variable not specified, automatically selected `y = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-2.png)
 
     data %>% 
       gg_season() +
@@ -51,10 +139,9 @@ industry groups in NZ. The data has been adjusted to the CPI of
            x = "Year",
            y = "Millions ($)")
 
-    ## Plot variable not specified, automatically selected `y = Fishing, Aquaculture
-    ## and Agriculture, Forestry and Fishing Support Services`
+    ## Plot variable not specified, automatically selected `y = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-3.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-3.png)
 
     data %>% 
       gg_lag() +
@@ -63,25 +150,23 @@ industry groups in NZ. The data has been adjusted to the CPI of
            y = "Millions ($)") +
       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-    ## Plot variable not specified, automatically selected `y = Fishing, Aquaculture
-    ## and Agriculture, Forestry and Fishing Support Services`
+    ## Plot variable not specified, automatically selected `y = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-4.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-4.png)
 
     data %>% 
       ACF() %>%
       autoplot()
 
-    ## Response variable not specified, automatically selected `var = Fishing,
-    ## Aquaculture and Agriculture, Forestry and Fishing Support Services`
+    ## Response variable not specified, automatically selected `var = FAAFFSS`
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-5.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-5.png)
 
     decomposed_data = data %>%
-      model(STL(`Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services` ))
+      model(STL(FAAFFSS ))
     components(decomposed_data) %>% autoplot()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-1-6.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-3-6.png)
 
 The time plot shows a general steady growth up of GDP until around 2008,
 the trend dipped for 2 years during the economic crisis before steady
@@ -128,53 +213,15 @@ GDP has significantly increased in the period. The effect of seasonality
 appear to have been decreasing initially up to around 2004 before
 increasing again.
 
-### Import Data
+# ETS models
 
-    base_data = read_csv("qgdp_training.csv")
-
-    ## Rows: 139 Columns: 34
-    ## ── Column specification ────────────────────────────────────────────────────────
-    ## Delimiter: ","
-    ## chr  (1): Date
-    ## dbl (33): Agriculture, Forestry and Logging, Fishing, Aquaculture and Agricu...
-    ## 
-    ## ℹ Use `spec()` to retrieve the full column specification for this data.
-    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-
-    data = base_data %>% 
-      select(Date, 
-             `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`) %>% 
-      mutate(Date = yearquarter(Date)) %>% 
-      rename(FAAFFSS = `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
-    data = as_tsibble(data, index=Date)
-    rm(list="base_data") #Delete the original dataset
-
-    data %>% autoplot() + 
-      labs(title="New Zealand Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services (FAAFFSS) GDP ($ Millions) from 1987Q2 to 2021Q4", x= "Quarter", y="FAAFFSS")
-
-    ## Plot variable not specified, automatically selected `.vars = FAAFFSS`
-
-![](README_files/figure-markdown_strict/unnamed-chunk-2-1.png) \#
-Methodology to Create a Shortlist of Appropriate Candidate ETS Models
+## Methodology to Create a Shortlist of Appropriate Candidate ETS Models
 
     # Check for missing values
     missing_values <- data %>% summarise(across(everything(), ~ sum(is.na(.))))
-    print(missing_values)
+    print(paste("There are", nrow(missing_values),"missing values."))
 
-    ## # A tsibble: 139 x 2 [1Q]
-    ##       Date FAAFFSS
-    ##      <qtr>   <int>
-    ##  1 1987 Q2       0
-    ##  2 1987 Q3       0
-    ##  3 1987 Q4       0
-    ##  4 1988 Q1       0
-    ##  5 1988 Q2       0
-    ##  6 1988 Q3       0
-    ##  7 1988 Q4       0
-    ##  8 1989 Q1       0
-    ##  9 1989 Q2       0
-    ## 10 1989 Q3       0
-    ## # ℹ 129 more rows
+    ## [1] "There are 139 missing values."
 
 ## Manual Model Fitting:
 
@@ -296,22 +343,118 @@ fit and model complexity.
       glance(fit_auto) %>% mutate(Model = "AUTO_MAM"),
     ) %>% select(Model, AICc) %>% arrange(AICc)
 
-    print(aic_values)
+    knitr::kable(aic_values)
 
-    ## # A tibble: 25 × 2
-    ##    Model     AICc
-    ##    <chr>    <dbl>
-    ##  1 MAM      1520.
-    ##  2 AUTO_MAM 1520.
-    ##  3 MAdM     1520.
-    ##  4 AAM      1523.
-    ##  5 AMM      1524.
-    ##  6 AAA      1527.
-    ##  7 AAdM     1528.
-    ##  8 AMA      1529.
-    ##  9 MMM      1530.
-    ## 10 ANM      1530.
-    ## # ℹ 15 more rows
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Model</th>
+<th style="text-align: right;">AICc</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">MAM</td>
+<td style="text-align: right;">1520.260</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AUTO_MAM</td>
+<td style="text-align: right;">1520.260</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MAdM</td>
+<td style="text-align: right;">1520.394</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AAM</td>
+<td style="text-align: right;">1522.644</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">AMM</td>
+<td style="text-align: right;">1524.073</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AAA</td>
+<td style="text-align: right;">1526.729</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">AAdM</td>
+<td style="text-align: right;">1527.659</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AMA</td>
+<td style="text-align: right;">1528.734</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MMM</td>
+<td style="text-align: right;">1530.183</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">ANM</td>
+<td style="text-align: right;">1530.458</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MAA</td>
+<td style="text-align: right;">1531.212</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AAdA</td>
+<td style="text-align: right;">1532.881</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ANA</td>
+<td style="text-align: right;">1538.268</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">MNM</td>
+<td style="text-align: right;">1543.496</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MMA</td>
+<td style="text-align: right;">1543.846</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">MAdA</td>
+<td style="text-align: right;">1544.422</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MNA</td>
+<td style="text-align: right;">1547.804</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AAN</td>
+<td style="text-align: right;">1649.688</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">AMN</td>
+<td style="text-align: right;">1649.707</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">AAdN</td>
+<td style="text-align: right;">1653.189</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ANN</td>
+<td style="text-align: right;">1655.655</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">MAN</td>
+<td style="text-align: right;">1669.362</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MAdN</td>
+<td style="text-align: right;">1671.170</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">MMN</td>
+<td style="text-align: right;">1673.251</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">MNN</td>
+<td style="text-align: right;">1679.913</td>
+</tr>
+</tbody>
+</table>
 
 ## Reasons for Selecting the ETS(MAM) Model: Lowest AICc Value
 
@@ -401,7 +544,7 @@ m is the period of seasonality.
     geom_line(aes(y = .fitted, colour = "Fitted")) +
     guides(colour = guide_legend(title = ""))
 
-![](README_files/figure-markdown_strict/unnamed-chunk-8-1.png) \## Model
+![](README_files/figure-markdown_strict/unnamed-chunk-9-1.png) \## Model
 Diagnostics:
 
 Residual Analysis: Perform residual diagnostics on the selected model to
@@ -415,7 +558,7 @@ validation.
     # Residual diagnostics
     best_model %>% gg_tsresiduals()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-9-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-10-1.png)
 
     # Components Decomposition
     best_model %>%
@@ -425,7 +568,9 @@ validation.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-9-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-10-2.png)
+
+### Generate ETS Forecasts
 
     # Generate forecasts
     forecast_data <- best_model %>% forecast(h = 8)
@@ -447,7 +592,7 @@ validation.
     forecast_data %>% autoplot(data) +
       labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "FAAFFSS")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-10-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-11-1.png)
 
 ## Explanation of Prediction Intervals
 
@@ -489,13 +634,156 @@ calculate the prediction interval at different confidence levels.
 In R, these steps are completed automatically by the forecast function,
 we only need to specify the forecast time range h.
 
-## Arima Models
+    # Assuming `best_model` is the ETS(MAM) model we selected earlier
+    residuals_data <- best_model %>% augment() %>% pull(.resid)
 
-### Explore different ARIMA models
+    # Convert residuals to a tsibble for testing
+    residuals_tsibble <- tsibble(Residuals = residuals_data, Date = data$Date, index = Date)
+
+    # Perform surrogate test
+    s = surrogate.test(residuals_tsibble, lag = 10, N = 1000, test.stat = "ljung-box")
+
+    # Extract p-value
+    s$p.value
+
+    ## [1] 0.192
+
+    # Plot the surrogate null distribution and observed test statistic
+    s %>% plot.surrogate() + theme_bw() + labs(title = "Surrogate Data Test with Ljung-Box Statistic")
+
+![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png) \##
+Explanation of the Surrogate Test for Independence
+
+The provided R code implements a surrogate test for independence on a
+time series dataset. This test is designed to determine if the residuals
+(or innovation residuals) of a model are independent, which is a key
+assumption in time series analysis. The surrogate test does this by
+comparing the observed autocorrelation structure of the residuals to a
+distribution of autocorrelation structures obtained from permuted
+(shuffled) versions of the data.
+
+### Interpretation of the p-value
+
+In the context of the surrogate test for independence, the p-value is
+used to determine whether we can reject the null hypothesis that the
+residuals are independent. The null hypothesis states that the residuals
+are independent (i.e., there is no significant autocorrelation in the
+residuals).
+
+### Significance Level
+
+A common significance level used in hypothesis testing is 0.05 (5%). If
+the p-value is less than 0.05, we reject the null hypothesis and
+conclude that there is significant autocorrelation in the residuals. If
+the p-value is greater than or equal to 0.05, we fail to reject the null
+hypothesis and conclude that there is no significant autocorrelation in
+the residuals.
+
+Since the p-value of our model is greater than the typical significance
+level of 0.05, we do not have enough evidence to reject the null
+hypothesis. This means that:
+
+The residuals of the ETS(MAM) model do not show significant
+autocorrelation. The residuals can be considered independent.
+
+### Conclusion
+
+The result of the surrogate test suggests that the residuals from the
+ETS(MAM) model are independent. This is a good outcome as it implies
+that the model has adequately captured the structure in the data,
+leaving behind residuals that behave like white noise, which is an
+important assumption in time series modeling.
+
+    # Load the test data set
+    test_data <- read.csv("qgdp_full.csv")
+
+    # Prepare the test data
+    test_data <- test_data %>%
+      select(Date, `Fishing..Aquaculture.and.Agriculture..Forestry.and.Fishing.Support.Services`) %>%
+      mutate(Date = yearquarter(Date)) %>%
+      rename(FAAFFSS = `Fishing..Aquaculture.and.Agriculture..Forestry.and.Fishing.Support.Services`)
+    test_data <- as_tsibble(test_data, index = Date)
+
+    # Extract the relevant part of the test data (2022 Q1 to 2023 Q4)
+    test_data_subset <- test_data %>%
+      filter(Date >= yearquarter("2022 Q1") & Date <= yearquarter("2023 Q4"))
+
+    # Merge forecasts with actual test data
+    comparison_data <- forecast_data %>%
+      left_join(test_data_subset, by = "Date") %>%
+      rename(Forecast = .mean, Actual = FAAFFSS.y) %>%
+      select(Date, Forecast, Actual)
+
+    # Calculate accuracy metrics
+    accuracy_metrics <- accuracy(comparison_data$Forecast, comparison_data$Actual)
+
+    # Print accuracy metrics
+    knitr::kable(accuracy_metrics)
+
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: right;">ME</th>
+<th style="text-align: right;">RMSE</th>
+<th style="text-align: right;">MAE</th>
+<th style="text-align: right;">MPE</th>
+<th style="text-align: right;">MAPE</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Test set</td>
+<td style="text-align: right;">9.280548</td>
+<td style="text-align: right;">19.54906</td>
+<td style="text-align: right;">16.67565</td>
+<td style="text-align: right;">1.539261</td>
+<td style="text-align: right;">2.654215</td>
+</tr>
+</tbody>
+</table>
+
+## Discussion on Model Performance
+
+The ETS(MAM) model’s performance in forecasting the GDP values for the
+“Fishing, Aquaculture, and Agriculture, Forestry, and Fishing Support
+Services” sector from 2022 Q1 to 2023 Q4 is evaluated using several
+accuracy metrics.
+
+#### Overall Performance
+
+The ETS(MAM) model demonstrates a strong performance in forecasting the
+GDP for the sector in question. The low values of ME, MAE, MPE, and MAPE
+indicate that the model’s forecasts are generally accurate and close to
+the actual values. The RMSE, while slightly higher, suggests that there
+are some larger errors, but they do not dominate the overall accuracy.
+
+#### Strengths and Limitations
+
+Strengths: The model captures the seasonal patterns and trends
+effectively, as evidenced by the low MAPE and MAE. The small positive
+bias indicates that the model slightly overestimates but is generally
+reliable.
+
+Limitations: The RMSE suggests that there are a few instances of larger
+errors. These may need further investigation to understand and
+potentially refine the model. The model could be improved by
+incorporating additional factors or using alternative modelling
+techniques to further reduce the forecast errors.
+
+In conclusion, the ETS(MAM) model provides reliable forecasts for the
+GDP values of the “Fishing, Aquaculture, and Agriculture, Forestry, and
+Fishing Support Services” sector, with a high degree of accuracy and
+only minor bias. Continuous monitoring and refinement could enhance the
+model’s performance further.
+
+# Arima Models
+
+## Explore different ARIMA models
 
 ### Explain any transformations or differencing required
 
-From data autoplot graph, we can see that
+From data autoplot graph, we can see:
 
 1.  the seasonal variations are increasing over time which suggests a
     multiplicative seasonality pattern. So we would do a log
@@ -503,12 +791,13 @@ From data autoplot graph, we can see that
     converts multiplicative relationships into additive ones, making the
     series easier to model.
 
-2.  the data seems have seasonal effects that repeat every 4 quarters.
-    So we would also differencing for seasonality to remove this effect.
+2.  the data seems to have a yearly seasonal effect that repeats every 4
+    quarters. So we would also perform differencing for seasonality to
+    remove this effect.
 
 3.there is an upward trend indicates that the mean of the series is not
 constant over time. So we would need to do first difference to make the
-series stationary in terms of the trend. However, as the data have a
+series stationary in terms of the trend. However, as the data has a
 strong seasonal pattern, we will apply seasonal differencing first,
 because sometimes the resulting series will be stationary and there will
 be no need for a further first difference.
@@ -520,8 +809,11 @@ be no need for a further first difference.
       labs(x = "x", y = "difference of y") + 
       theme_minimal() 
 
-![](README_files/figure-markdown_strict/unnamed-chunk-11-1.png) so it
-moved the large of change in variability. variance roughly constant.
+![](README_files/figure-markdown_strict/unnamed-chunk-14-1.png)
+
+We can see that the log transformation of the data removed the large
+change in variability and made the variance roughly concept, perhaps
+except for the first few peaks around 1990.
 
     # differencing seasonality
 
@@ -533,45 +825,46 @@ moved the large of change in variability. variance roughly constant.
     ## Warning: Removed 4 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-15-1.png)
 
-after differencing seasonality, we can’t see any patterns now. we
-removed the autocorrelation in seasonality. It also shows flat trend and
-the mean is roughly constant, which suggests we removed the trend by
-seasonal differencing and we don’t need to to first order difference
-anymore. So we have stationary time series.
+After differencing seasonality, we can’t see any non stationary patterns
+now. we removed the autocorrelation in seasonality. It also shows flat
+trend and the mean is roughly constant, which suggests we removed the
+trend by seasonal differencing and we don’t need to to first order
+difference anymore. So we have a stationary time series.
 
     # test if now the time series data are stationary and non-seasonaly with KPSS test
     data  %>%
       features(FAAFFSS , unitroot_kpss)
 
-    ## Warning: 1 error encountered for feature 1
-    ## [1] The `urca` package must be installed to use this functionality. It can be installed with install.packages("urca")
-
-    ## # A tibble: 1 × 0
+    ## # A tibble: 1 × 2
+    ##   kpss_stat kpss_pvalue
+    ##       <dbl>       <dbl>
+    ## 1      2.47        0.01
 
     data  %>%
-      features(difference(log(FAAFFSS), 4) , unitroot_kpss)
+      features(log(FAAFFSS)%>%difference(4)%>%difference(1) , unitroot_kpss)
 
-    ## Warning: 1 error encountered for feature 1
-    ## [1] The `urca` package must be installed to use this functionality. It can be installed with install.packages("urca")
+    ## # A tibble: 1 × 2
+    ##   kpss_stat kpss_pvalue
+    ##       <dbl>       <dbl>
+    ## 1    0.0311         0.1
 
-    ## # A tibble: 1 × 0
+We can see the change of kpss after applying the transformation and
+difference. There is now no evidence against the null hypothesis of non
+stationarity. which means we have a stationary time series.
 
-so we can see the change of kpss after applying the transformation and
-difference. there is now no evidence against the null hypothesis. which
-means we get a stationary time series.
-
-Or we can test how many difference we need to do to get a stationary
-time series. It shows 1 is enough, which with aligns with what we did.
+Or we can test how many differences we need to do to get a stationary
+time series. It shows 1 is enough, which with aligns with what we have
+already seen.
 
     data %>%
     features(FAAFFSS, unitroot_ndiffs)
 
-    ## Warning: 1 error encountered for feature 1
-    ## [1] The `urca` package must be installed to use this functionality. It can be installed with install.packages("urca")
-
-    ## # A tibble: 1 × 0
+    ## # A tibble: 1 × 1
+    ##   ndiffs
+    ##    <int>
+    ## 1      1
 
     data %>%
     mutate(log_fa = log(FAAFFSS)) %>%
@@ -597,112 +890,224 @@ time series. It shows 1 is enough, which with aligns with what we did.
 Now we will check on the acf and pacf to help us decide appropriate
 candidate ARIMA models.
 
-    data %>%gg_tsdisplay( log(FAAFFSS) %>% difference(4) , plot_type = "partial")
+    data %>%gg_tsdisplay( log(FAAFFSS) %>% difference(4)%>% difference(1) , plot_type = "partial",lag_max = 24)
 
-    ## Warning: Removed 4 rows containing missing values or values outside the scale range
+    ## Warning: Removed 5 rows containing missing values or values outside the scale range
     ## (`geom_line()`).
 
-    ## Warning: Removed 4 rows containing missing values or values outside the scale range
+    ## Warning: Removed 5 rows containing missing values or values outside the scale range
     ## (`geom_point()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-17-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-20-1.png)
 
-For the autoregression process, we check the pacf plot and see that the
-significant peaks up to 4 and no significant peaks afterwards. it
-suggest 4 autoregressive terms. likewise,for the moving average process,
-we check the acf plot and see significant peaks up to the order of 3 and
-no significant peaks afterwards. it suggest 3 moving average terms. Now
-we add the manual fit and automatical fit together.
+First we look at the seasonal terms: we focuse on lags that are
+multiples of the seasonal period ( lag 4, lag 8, lag 12, etc., for a
+quarterly series with a period of 4).
 
-    # Manually and Automatically fit candidate models 
+-   For the autoregression process, we check the pacf plot and see that
+    the significant peaks up to 2 and no significant peaks afterwards.
+    it suggest 2 seasonal autoregressive terms. (P=2)
+
+-   Likewise,for the moving average process, we check the acf plot and
+    see significant peaks up to the order of 1 and no significant peaks
+    afterwards. it suggest 1 moving average terms.(Q=1)
+
+Next we look at the non-seasonal terms: we will restrict to the lags
+lower than our seasonal frequency of 4.
+
+-   For the autoregression process,we see there are only 1 peaks. it
+    suggest 1 autoregressive terms. (p=1)
+
+-   For the moving average process, we see there are only 1 peaks. it
+    suggest 1 autoregressive terms. (q=1)
+
+We can summarise as : Non-seasonal: ARIMA(1, 1, 1); Seasonal: (2, 1,
+1)\[4\]
+
+    # we add the manual fit and automatical fit together. p is autoregression,q is moving average
+
     fit <- data %>%
-      model(arima_013 = ARIMA(FAAFFSS ~ pdq(0, 1, 3)),
-            arima_413 = ARIMA(FAAFFSS ~ pdq(4, 1, 0)),
-            stepwise = ARIMA(FAAFFSS),
-            search = ARIMA(FAAFFSS, stepwise = FALSE))
+      model(arima_110210 = ARIMA(log(FAAFFSS) ~ pdq(1, 1, 0) + PDQ(2, 1, 0)),
+            arima_110011 = ARIMA(log(FAAFFSS) ~ pdq(1, 1, 0) + PDQ(0, 1, 1)),
+            arima_011210 = ARIMA(log(FAAFFSS) ~ pdq(0, 1, 1) + PDQ(2, 1, 0)),
+            arima_011011 = ARIMA(log(FAAFFSS) ~ pdq(0, 1, 1) + PDQ(0, 1, 1)),
+            stepwise = ARIMA(log(FAAFFSS)),
+            search = ARIMA(log(FAAFFSS), stepwise = FALSE))
 
-    ## Warning: 1 error encountered for stepwise
-    ## [1] The `urca` package must be installed to use this functionality. It can be installed with install.packages("urca")
-
-    ## Warning: 1 error encountered for search
-    ## [1] The `urca` package must be installed to use this functionality. It can be installed with install.packages("urca")
-
-### Select the best model & explain why
+## Select the best model & explain why
 
 We compare the result of both manual and auto fit ARIMA model and select
 the model with smallest AICc as the best model. Here we will select the
-manually fitted one “arima\_013” as our best model.
+auto fitted one “search” as our best model.
 
     glance(fit) %>% 
       arrange(AICc) %>% 
-      select(.model:BIC)
+      select(.model:BIC) %>% 
+      knitr::kable()
 
-    ## # A tibble: 2 × 6
-    ##   .model    sigma2 log_lik   AIC  AICc   BIC
-    ##   <chr>      <dbl>   <dbl> <dbl> <dbl> <dbl>
-    ## 1 arima_013   355.   -582. 1175. 1175. 1189.
-    ## 2 arima_413   356.   -582. 1176. 1177. 1194.
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">.model</th>
+<th style="text-align: right;">sigma2</th>
+<th style="text-align: right;">log_lik</th>
+<th style="text-align: right;">AIC</th>
+<th style="text-align: right;">AICc</th>
+<th style="text-align: right;">BIC</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">search</td>
+<td style="text-align: right;">0.0024368</td>
+<td style="text-align: right;">217.4325</td>
+<td style="text-align: right;">-418.8649</td>
+<td style="text-align: right;">-417.7221</td>
+<td style="text-align: right;">-395.6227</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">stepwise</td>
+<td style="text-align: right;">0.0025508</td>
+<td style="text-align: right;">212.5361</td>
+<td style="text-align: right;">-417.0722</td>
+<td style="text-align: right;">-416.7645</td>
+<td style="text-align: right;">-405.4511</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">arima_011210</td>
+<td style="text-align: right;">0.0026980</td>
+<td style="text-align: right;">207.1489</td>
+<td style="text-align: right;">-406.2978</td>
+<td style="text-align: right;">-405.9877</td>
+<td style="text-align: right;">-394.7065</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">arima_011011</td>
+<td style="text-align: right;">0.0027717</td>
+<td style="text-align: right;">205.0209</td>
+<td style="text-align: right;">-404.0417</td>
+<td style="text-align: right;">-403.8571</td>
+<td style="text-align: right;">-395.3482</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">arima_110210</td>
+<td style="text-align: right;">0.0027490</td>
+<td style="text-align: right;">205.9847</td>
+<td style="text-align: right;">-403.9695</td>
+<td style="text-align: right;">-403.6594</td>
+<td style="text-align: right;">-392.3781</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">arima_110011</td>
+<td style="text-align: right;">0.0028107</td>
+<td style="text-align: right;">204.1413</td>
+<td style="text-align: right;">-402.2826</td>
+<td style="text-align: right;">-402.0980</td>
+<td style="text-align: right;">-393.5891</td>
+</tr>
+</tbody>
+</table>
 
     # Report best model
     fit %>%
-      select(arima_013) %>%
+      select(search) %>%
       report()
 
     ## Series: FAAFFSS 
-    ## Model: ARIMA(0,1,3)(0,1,1)[4] 
+    ## Model: ARIMA(4,0,2)(0,1,0)[4] w/ drift 
+    ## Transformation: log(FAAFFSS) 
     ## 
     ## Coefficients:
-    ##           ma1      ma2     ma3     sma1
-    ##       -0.1995  -0.2150  0.0925  -0.5801
-    ## s.e.   0.0866   0.0938  0.1052   0.0746
+    ##          ar1      ar2     ar3      ar4     ma1     ma2  constant
+    ##       0.0877  -0.2112  0.5777  -0.2686  0.6092  0.7034    0.0271
+    ## s.e.  0.1518   0.1036  0.0946   0.1033  0.1455  0.1344    0.0095
     ## 
-    ## sigma^2 estimated as 354.5:  log likelihood=-582.38
-    ## AIC=1174.76   AICc=1175.23   BIC=1189.25
+    ## sigma^2 estimated as 0.002437:  log likelihood=217.43
+    ## AIC=-418.86   AICc=-417.72   BIC=-395.62
 
 ### Write the model equation in backshift notation
 
-This specifies an ARIMA(0, 1, 3) model, which means: p=0: No
-autoregressive (AR) terms. d=1: First difference to achieve stationary.
-q=3: Three moving average (MA) terms. Backshift Notation:
+The best model specifies an ARIMA(4,0,2)(0,1,0)\[4\] model, which means:
 
-*W*<sub>*t*</sub> = *Y*<sub>*t*</sub> − *Y*<sub>*t* − 1</sub>
-The ARIMA(0, 1, 3) model is:
+#### Model Components
 
-*W*<sub>*t*</sub> = *ϵ*<sub>*t*</sub> − *θ*<sub>1</sub>*ϵ*<sub>*t* − 1</sub> − *θ*<sub>2</sub>*ϵ*<sub>*t* − 2</sub> − *θ*<sub>3</sub>*ϵ*<sub>*t* − 3</sub>
+-   *p* = 4: Number of autoregressive terms
+-   *d* = 0: Degree of non-seasonal differencing
+-   *q* = 2: Number of moving average terms
+-   *P* = 0: Number of seasonal autoregressive terms
+-   *D* = 1: Degree of seasonal differencing
+-   *Q* = 0: Number of seasonal moving average terms
+-   *s* = 4: Seasonal period
 
-Substituting *W*<sub>*t*</sub> gives:
+The backshift operator *B* is defined as
+*B*<sup>*k*</sup>*y*<sub>*t*</sub> = *y*<sub>*t* − *k*</sub>. Using this
+notation, the model can be written as:
 
-*Y*<sub>*t*</sub> − *Y*<sub>*t* − 1</sub> = *ϵ*<sub>*t*</sub> − *θ*<sub>1</sub>*ϵ*<sub>*t* − 1</sub> − *θ*<sub>2</sub>*ϵ*<sub>*t* − 2</sub> − *θ*<sub>3</sub>*ϵ*<sub>*t* − 3</sub>
+##### Seasonal Differencing
 
-Rearranging the terms, we get:
+(1−*B*<sup>4</sup>)*y*<sub>*t*</sub> = *y*<sub>*t*</sub> − *y*<sub>*t* − 4</sub>
 
-*Y*<sub>*t*</sub> = *Y*<sub>*t* − 1</sub> + *ϵ*<sub>*t*</sub> − *θ*<sub>1</sub>*ϵ*<sub>*t* − 1</sub> − *θ*<sub>2</sub>*ϵ*<sub>*t* − 2</sub> − *θ*<sub>3</sub>*ϵ*<sub>*t* − 3</sub>
+##### Non-Seasonal Part
 
-Where: - *Y*<sub>*t*</sub> is the value of the series at time *t*. -
-*ϵ*<sub>*t*</sub> is the white noise error term at time *t*. -
-*θ*<sub>1</sub>, *θ*<sub>2</sub>, *θ*<sub>3</sub> are the parameters of
-the MA terms.
+The non-seasonal part of the ARIMA model with autoregressive (AR) and
+moving average (MA) terms is:
 
-### Produce residual diagnostic plots (ggtsresiduals())
+(1−*ϕ*<sub>1</sub>*B*−*ϕ*<sub>2</sub>*B*<sup>2</sup>−*ϕ*<sub>3</sub>*B*<sup>3</sup>−*ϕ*<sub>4</sub>*B*<sup>4</sup>)(1−*B*<sup>4</sup>)*y*<sub>*t*</sub> = (1+*θ*<sub>1</sub>*B*+*θ*<sub>2</sub>*B*<sup>2</sup>)*ϵ*<sub>*t*</sub>
+
+where: -
+*ϕ*<sub>1</sub>, *ϕ*<sub>2</sub>, *ϕ*<sub>3</sub>, *ϕ*<sub>4</sub> are
+the autoregressive parameters - *θ*<sub>1</sub>, *θ*<sub>2</sub> are the
+moving average parameters - *ϵ*<sub>*t*</sub> is the white noise error
+term
+
+Putting it all together, the ARIMA(4,0,2)(0,1,0)\[4\] model is:
+
+(1−*ϕ*<sub>1</sub>*B*−*ϕ*<sub>2</sub>*B*<sup>2</sup>−*ϕ*<sub>3</sub>*B*<sup>3</sup>−*ϕ*<sub>4</sub>*B*<sup>4</sup>)(1−*B*<sup>4</sup>)*y*<sub>*t*</sub> = (1+*θ*<sub>1</sub>*B*+*θ*<sub>2</sub>*B*<sup>2</sup>)*ϵ*<sub>*t*</sub>
+
+### Produce residual diagnostic plots
 
     # Check residuals
     fit %>% 
-      select(arima_013) %>%
+      select(search) %>%
       gg_tsresiduals()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-21-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-24-1.png)
+
+    fit %>% 
+      select(search) %>%
+      augment()%>%
+      features(.resid,ljung_box,lag=8,dof=7)
+
+    ## # A tibble: 1 × 3
+    ##   .model lb_stat lb_pvalue
+    ##   <chr>    <dbl>     <dbl>
+    ## 1 search    4.11    0.0427
+
+The predictor variables appear to be linear with the forecast variable.
+We can see this linearity in the plot of the observed versus fitted
+values. The time plot of residuals show that the residuals appear to
+have zero mean and constant variance. The histogram of the residuals
+appears to be symmetric and normally distributed. The correlogram of the
+residuals shows significant autocorrelation at lag 10. It contributes
+towards the Ljung-Box test statistic(4.1). The p-value from this test is
+0.0427, slightly under the significant level of 0.05, which gives us
+some evidence against the null hypothesis that the residuals are
+independent, suggesting the residuals are still a bit autocorrelated.
+This means there is information left in the residuals that should be
+used for forecasting. Therefore, all model assumptions apart from
+independence have been met.
 
 ### Produce forecasts for h=8 quarters
 
     ARIMA_forecast = fit %>% 
-      select(arima_013) %>%
+      select(search) %>%
       forecast(h = 8) 
     ARIMA_forecast %>%
       autoplot(data) + 
       labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)") +
       theme_minimal()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-22-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-26-1.png)
 
 ### Explain how prediction intervals are calculated for the method
 
@@ -736,7 +1141,7 @@ normal distribution for the desired confidence level (e.g., 1.96 for 95%
 confidence). - *σ*<sub>*h*</sub> is the standard error of the *h*-step
 ahead forecast.
 
-## Neural Network Auto Regression Model
+# Neural Network Auto Regression Model
 
 To understand how a Neural Network Auto Regression (NNAR) model works,
 its important to first understand the workings of a standard feed
@@ -809,11 +1214,11 @@ time series and taking the optimal number of lags according to AIC. The
 P parameter will automatically be set to 1, and the k parameter is set
 to (p + P + 1)/2.
 
-### Model fitting
+## Model fitting
 
     NN.fit = data %>% 
       model(base_model = NNETAR()) %>% 
-      report(base_model)
+      report()
 
     ## Model not specified, defaulting to automatic modelling of the `FAAFFSS`
     ## variable. Override this using the model formula.
@@ -825,7 +1230,7 @@ to (p + P + 1)/2.
     ## a 2-2-1 network with 9 weights
     ## options were - linear output units 
     ## 
-    ## sigma^2 estimated as 488.5
+    ## sigma^2 estimated as 486.3
 
     NN.fit %>% gg_tsresiduals()
 
@@ -838,7 +1243,7 @@ to (p + P + 1)/2.
     ## Warning: Removed 4 rows containing non-finite outside the scale range
     ## (`stat_bin()`).
 
-![](README_files/figure-markdown_strict/unnamed-chunk-23-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-27-1.png)
 
     NN_forecast = NN.fit %>% 
       forecast(h=8) 
@@ -846,7 +1251,14 @@ to (p + P + 1)/2.
       autoplot(data) +
       labs(title = "Forecast for the next 8 quarters", x = "Quarter", y = "Millions ($)")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-23-2.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-27-2.png)
+
+### Report the fitted model
+
+We can see the NNAR model was wit with p = 1, P = 1, and k = 2,
+following the method of parameter choice we discussed prior. This
+suggests that the optimal number of lags according to AIC must have been
+1.
 
 ### Prediction Interval Calculation
 
@@ -869,7 +1281,7 @@ contains 80% and 95% of (predictions + errors) at the next time period.
 This process can be repeated for as many forecast periods as we like by
 using the most recent prediction as the input for the new predictions.
 
-### Assumption checking.
+# Assumption checking.
 
 Surrogate data testing is a method used in time series analysis to check
 whether the data can be described by a linear process. We first assume
@@ -890,136 +1302,34 @@ calculated for the original time series differs significantly from the
 surrogate datasets, we reject the null hypothesis of linearity, that is,
 the original time series was non-linear.
 
-    data = read_csv("qgdp_training.csv")
-
-    ## Rows: 139 Columns: 34
-    ## ── Column specification ────────────────────────────────────────────────────────
-    ## Delimiter: ","
-    ## chr  (1): Date
-    ## dbl (33): Agriculture, Forestry and Logging, Fishing, Aquaculture and Agricu...
-    ## 
-    ## ℹ Use `spec()` to retrieve the full column specification for this data.
-    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-
-    data = data %>% mutate(Date = yearquarter(Date)) %>%
-      select(Date, `Fishing, Aquaculture and Agriculture, Forestry and Fishing Support Services`)
-    tsibble = data %>% 
-     as_tsibble(index = Date)
-
-    # Function to perform surrogate test for independence
-    surrogate.test = function(data, lag, N = 1000, test.stat = "ljung-box") {
-      
-      # data: a tsibble or numeric vector object
-      # lag: number of lags in portmanteau test statistic
-      # N: number of permutations to perform
-      # test.stat: either "ljung-box" or "box-pierce"
-      
-      if (is_tsibble(data)) {
-        if (length(measures(data)) != 1) {  
-          stop("data must be a tsibble with one measurement variable")
-        }
-        # Extract time series 
-        data = data %>% 
-          pull(as.character(measures(data)[[1]])) 
-      }
-
-      n = length(data)
-
-      Q.null = rep(NA, N)  # Open test statistic vectors
-      
-      if (test.stat == "ljung-box") {
-        
-        # Observed test statistic
-        r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
-        Q.obs = n * (n + 2) * sum(r.obs ^ 2 / (n - 1:lag))
-        
-        # Null distribution
-        for (i in 1:N) {
-          surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
-          r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]   # Estimate autocorrelation
-          Q.null[i] = n * (n + 2) * sum(r ^ 2 / (n - 1:lag))  # Ljung-Box test statistic
-        }
-        
-      }
-      
-      if (test.stat == "box-pierce") {
-        
-        # Observed test statistic
-        r.obs = acf(data, plot = FALSE)$acf[2:(lag + 1)]
-        Q.obs = n * sum(r.obs ^ 2)
-        
-        # Null distribution
-        for (i in 1:N) {
-          surrogate = sample(data, n)  # Permute data (kill autocorrelation, maintain amplitude)
-          r = acf(surrogate, plot = FALSE)$acf[2:(lag + 1)]  # Estimate autocorrelation
-          Q.null[i] = n * sum(r ^ 2)                         # Box-Pierce test statistic
-        }
-        
-      }
-      
-      # Compute p-value
-      p.value = mean(Q.null >= Q.obs)  # p-value
-
-      # Output
-      output = list(Q.null = Q.null,
-                    Q.obs = Q.obs,
-                    test.stat = test.stat,
-                    p.value = p.value)
-      
-      class(output) = "surrogate"
-      
-      return(output)
-      
-    }
-
-
-    # Function to plot surrogate null distribution and observed test statistic
-    # Requires ggplot2
-    plot.surrogate = function(obj, binwidth = 10) {
-      
-      # obj: Object of class "surrogate"
-      # binwidth: width of the bins for the histogram
-
-      ggplot(data = data.frame(Q = obj$Q.null),
-             mapping = aes(x = Q)) +
-        geom_histogram(fill = "navy", colour = "black", binwidth = binwidth) +
-        geom_vline(xintercept = obj$Q.obs,
-                   linetype = "dashed") +
-        labs(x = "Test statistic",
-             y = "Count") 
-      
-    }
-
-
     # Run surrogate test on the data
-    s = surrogate.test(tsibble, lag = 8)
-    print(paste("P-value for Ljung-Box statistic: ", s$p.value))
+    s = surrogate.test(data, lag = 8)
+    print(paste0("P-value for Ljung-Box statistic: ", s$p.value))
 
-    ## [1] "P-value for Ljung-Box statistic:  0"
+    ## [1] "P-value for Ljung-Box statistic: 0"
 
     s %>% 
       plot.surrogate(binwidth = 5) + 
       theme_bw() +
       labs(title = "Surrogate data test with Ljung-Box statistic")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-24-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-28-1.png)
 
-    p = surrogate.test(tsibble, lag = 8, test.stat = "box-pierce")
-    print(paste("P-value for Box-Pierce statistic: ", p$p.value))
+    p = surrogate.test(data, lag = 8, test.stat = "box-pierce")
+    print(paste0("P-value for Box-Pierce statistic: ", p$p.value))
 
-    ## [1] "P-value for Box-Pierce statistic:  0"
+    ## [1] "P-value for Box-Pierce statistic: 0"
 
     p %>% 
       plot.surrogate(binwidth = 5) + 
       theme_bw() +
       labs(title = "Surrogate data test with Box-Pierce statistic")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-24-2.png) \###
-Explaining the r code
+![](README_files/figure-markdown_strict/unnamed-chunk-28-2.png)
 
-Initally there is some data prep depending on the data format.
+### Explaining the r code
 
-surrogate.test calculates the observed test statistic and the null
+Surrogate.test calculates the observed test statistic and the null
 distribution according to the test statistic chosen. The observed test
 statistic is calculated using the autocorrelation function of the data.
 The null distribution is generated by permuting the data and calculating
@@ -1032,8 +1342,8 @@ statistic.
 The function returns a list containing the null distribution, the
 observed test statistic, the test statistic used, and the p-value.
 
-plot.surrogate. function plots the surrogate null distribution and the
-observed test statistic, using the output from surrogate.test. A
+The plot.surrogate() function plots the surrogate null distribution and
+the observed test statistic, using the output from surrogate.test. A
 histogram is plotted for the surrogate test statistics and a vertical
 dashed line is plotted for the observed test statistic calculated from
 the original data. I modified this to include a parameter for the
@@ -1046,7 +1356,7 @@ that is the case. The vertical dashed line (observed test statistic) is
 far away from the histogram. Hence we reject the null hypothesis of
 independence in the residuals.
 
-### Forecasting accuracy
+# Forecasting accuracy
 
     full_data = read_csv("qgdp_full.csv")
 
@@ -1065,26 +1375,103 @@ independence in the residuals.
     full_data = full_data %>% 
      as_tsibble(index = Date)
 
-    accuracy(forecast_data, full_data)
+    rbind(
+      as.matrix(accuracy(forecast_data, full_data)),
+      as.matrix(accuracy(ARIMA_forecast, full_data)),
+      as.matrix(accuracy(NN_forecast, full_data))
+    ) %>% 
+      knitr::kable()
 
-    ## # A tibble: 1 × 10
-    ##   .model                   .type    ME  RMSE   MAE   MPE  MAPE  MASE RMSSE  ACF1
-    ##   <chr>                    <chr> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
-    ## 1 "ETS(FAAFFSS ~ error(\"… Test   9.28  19.5  16.7  1.54  2.65 0.724 0.687 0.149
+<table style="width:100%;">
+<colgroup>
+<col style="width: 38%" />
+<col style="width: 4%" />
+<col style="width: 7%" />
+<col style="width: 6%" />
+<col style="width: 6%" />
+<col style="width: 7%" />
+<col style="width: 6%" />
+<col style="width: 7%" />
+<col style="width: 7%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">.model</th>
+<th style="text-align: left;">.type</th>
+<th style="text-align: left;">ME</th>
+<th style="text-align: left;">RMSE</th>
+<th style="text-align: left;">MAE</th>
+<th style="text-align: left;">MPE</th>
+<th style="text-align: left;">MAPE</th>
+<th style="text-align: left;">MASE</th>
+<th style="text-align: left;">RMSSE</th>
+<th style="text-align: left;">ACF1</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">ETS(FAAFFSS ~ error(“M”) + trend(“A”) +
+season(“M”))</td>
+<td style="text-align: left;">Test</td>
+<td style="text-align: left;">9.280548</td>
+<td style="text-align: left;">19.54906</td>
+<td style="text-align: left;">16.67565</td>
+<td style="text-align: left;">1.539261</td>
+<td style="text-align: left;">2.654215</td>
+<td style="text-align: left;">0.7236298</td>
+<td style="text-align: left;">0.6872077</td>
+<td style="text-align: left;">0.1490431</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">search</td>
+<td style="text-align: left;">Test</td>
+<td style="text-align: left;">-0.3278218</td>
+<td style="text-align: left;">20.05912</td>
+<td style="text-align: left;">17.06621</td>
+<td style="text-align: left;">0.04364299</td>
+<td style="text-align: left;">2.687593</td>
+<td style="text-align: left;">0.7405782</td>
+<td style="text-align: left;">0.7051378</td>
+<td style="text-align: left;">0.1612757</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">base_model</td>
+<td style="text-align: left;">Test</td>
+<td style="text-align: left;">-0.4065285</td>
+<td style="text-align: left;">10.10265</td>
+<td style="text-align: left;">7.700639</td>
+<td style="text-align: left;">-0.087452</td>
+<td style="text-align: left;">1.215663</td>
+<td style="text-align: left;">0.3341647</td>
+<td style="text-align: left;">0.3551381</td>
+<td style="text-align: left;">0.2156749</td>
+</tr>
+</tbody>
+</table>
 
-    accuracy(ARIMA_forecast, full_data)
+    all_forecasts = test_data_subset %>%
+      left_join(forecast_data, by = "Date") %>%
+      rename(ETS_Forecast = .mean, Actual = FAAFFSS.x) %>%
+      left_join(ARIMA_forecast, by = "Date") %>%
+      rename(ARIMA_Forecast = .mean) %>%
+      left_join(NN_forecast, by = "Date") %>%
+      rename(NNAR_Forecast = .mean) %>%
+      select(Date,
+             ETS_Forecast,
+             ARIMA_Forecast,
+             NNAR_Forecast,
+             Actual)
 
-    ## # A tibble: 1 × 10
-    ##   .model    .type    ME  RMSE   MAE   MPE  MAPE  MASE RMSSE  ACF1
-    ##   <chr>     <chr> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
-    ## 1 arima_013 Test  -9.40  18.8  15.7 -1.40  2.44 0.680 0.661 0.197
+    # Plot forecasts vs actual values
+    all_forecasts %>%
+      pivot_longer(cols = -Date, names_to = "Predictor", values_to = "Value") %>% 
+      ggplot(aes(x = Date, y = Value, color = Predictor)) +
+      geom_line() +
+      labs(title = "Forecasts vs Actual Values for FAAFFSS GDP", x = "Date", y = "GDP") +
+      theme_minimal()
 
-    accuracy(NN_forecast, full_data)
-
-    ## # A tibble: 1 × 10
-    ##   .model     .type    ME  RMSE   MAE    MPE  MAPE  MASE RMSSE  ACF1
-    ##   <chr>      <chr> <dbl> <dbl> <dbl>  <dbl> <dbl> <dbl> <dbl> <dbl>
-    ## 1 base_model Test  -2.61  11.3  8.29 -0.436  1.32 0.360 0.397 0.212
+![](README_files/figure-markdown_strict/unnamed-chunk-29-1.png)
 
 The NNAR forecast has the lowest MASE. The ARIMA model has a lower MASE
 than the ETS model but they are not too different. Using MASE as the
@@ -1093,3 +1480,27 @@ suggest that the NNAR made the best predictions, it has the lowest RMSE,
 MAE, MAPE, RMSSE and has an MPE and ME closest to 0. The ARIMA model did
 better than the ETS model on 6 of the 7 error measures (not ME),
 although not by much, so it is a distant second.
+
+# Member Contributions
+
+## Yuan (ych150)
+
+-   ARIMA implementation & writeup
+-   Assisted with managing github
+
+## Stephen (shal797)
+
+-   NNAR Implementation & writeup
+-   Managing meetings, github & submission
+-   Final touch ups and collation
+
+## Yuxiao (wany441)
+
+-   ETS implementation & writeup
+-   Assisted with test set forecast comparisons
+
+## Bill (wany803)
+
+-   Exploratory analysis
+-   Assumption checking
+-   Test set forecast comparisons
