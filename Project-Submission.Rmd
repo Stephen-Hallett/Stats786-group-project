@@ -177,7 +177,7 @@ The STL composition highlights that the general trend contributes the most to th
 ```{r}
 # Check for missing values
 missing_values <- data %>% summarise(across(everything(), ~ sum(is.na(.))))
-print(paste("There are", nrow(missing_values),"missing values.")
+print(paste("There are", nrow(missing_values),"missing values."))
 ```
 ## Manual Model Fitting:
 
